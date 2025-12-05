@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Player Comparison — Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600,700&display=swap" rel="stylesheet">
+<style>
+body { font-family: Inter,sans-serif; margin:0; background:#f8fafc; color:#1e293b; }
+header { background:#1e40af; color:#fff; padding:1rem 1.5rem; display:flex; justify-content:space-between; align-items:center;}
+header h1 { margin:0; font-size:1.25rem; }
+nav { display:flex; justify-content:center; gap:10px; padding:0.75rem; background:#e2e8f0; }
+nav a { color:#fff; text-decoration:none; padding:.6rem 1rem; background:#3b82f6; border-radius:6px; font-weight:600; }
+nav a:hover { opacity:.9; transform:translateY(-1px); }
+main { max-width:900px; margin:1.25rem auto; padding:0 1rem; }
+table { width:100%; border-collapse:collapse; margin-top:1rem; }
+th, td { padding:.6rem .8rem; text-align:left; border-bottom:1px solid #ccc; }
+th { background:#e2e8f0; }
+tbody tr.selected { background:#dbeafe; }
+.percent { text-align:right; font-weight:600; }
+.overlay { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); display:flex; justify-content:center; align-items:center; visibility:hidden; opacity:0; transition:0.3s; }
+.overlay.active { visibility:visible; opacity:1; }
+.overlay-content { background:#fff; padding:1.5rem; border-radius:12px; max-width:600px; width:90%; max-height:80%; overflow:auto; }
+.color-high { background:#10b981; color:#fff; padding:0.2rem 0.4rem; border-radius:4px; }
+.color-mid { background:#facc15; color:#1e293b; padding:0.2rem 0.4rem; border-radius:4px; }
+.color-low { background:#ef4444; color:#fff; padding:0.2rem 0.4rem; border-radius:4px; }
+.button { padding:.4rem .8rem; border:none; border-radius:6px; cursor:pointer; font-weight:600; margin-top:.5rem; background:#3b82f6; color:#fff; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Player Comparison</h1>
+</header>
+<nav>
+  <a href="power.html">Add Stats</a>
+  <a href="compare.html">Compare</a>
+</nav>
+
+<main>
+  <table id="playerTable">
+    <thead>
+      <tr>
+        <th>Player</th>
+        <th>Previous Power</th>
+        <th>Current Power</th>
+        <th>% Change</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+  <button id="compareBtn" class="button">Compare Selected</button>
+</main>
+
+<div class="overlay" id="overlay">
+  <div class="overlay-content">
+    <h2>Comparison</h2>
+    <div id="comparisonContent"></div>
+    <button id="closeOverlay" class="button">Close</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  const playerTable = document.querySelector('#playerTable tbody');
+  const compareBtn = document.getElementById('compareBtn');
+  const overlay = document.getElementById('overlay');
+  const comparisonContent = document.getElementById('comparisonContent');
+  const closeOverlay = document.getElementById('closeOverlay');
+
+  let selectedPlayers = new Set();
+
+  function loadPlayers(){
+    const players = JSON.parse(localStorage.getItem('players')||'[]');
+    const entries = JSON.parse(localStorage.getItem('entries')||'[]');
+    const data = [];
+    players.forEach(name=>{
+      const playerEntries = entries.filter(e=>e.player===name);
+      playerEntries.sort((a,b)=>new Date(a.date)-new Date(b.date));
+      const latest = playerEntries[playerEntries.length-1] || {power:0};
+      const prev = playerEntries.length>1 ? playerEntries[playerEntries.length-2] : {power:0};
+      const change = prev.power ? ((latest.power - prev.power)/prev.power*100) : 0;
+      data.push({name, latestPower: latest.power, prevPower: prev.power, change});
+    });
+    return data;
+  }
+
+  function formatNumber(n){ return n.toLocaleString(); }
+
+  function renderTable(){
+    const data = loadPlayers();
+    playerTable.innerHTML = '';
+    if(!data.length){
+      playerTable.innerHTML='<tr><td colspan="4" style="text-align:center;color:#555">No players</td></tr>';
+      return;
+    }
+    data.sort((a,b)=>b.latestPower-a.latestPower).forEach(d=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${d.name}</td>
+        <td>${formatNumber(d.prevPower)}</td>
+        <td>${formatNumber(d.latestPower)}</td>
+        <td class="percent">${d.change>=0?'+':''}${d.change.toFixed(2)}%</td>
+      `;
+      playerTable.appendChild(tr);
+
+      tr.addEventListener('click', ()=>{
+        if(selectedPlayers.has(d.name)) selectedPlayers.delete(d.name);
+        else selectedPlayers.add(d.name);
+        document.querySelectorAll('#playerTable tr').forEach(r=>r.classList.remove('selected'));
+        Array.from(playerTable.children).forEach(row=>{
+          if(selectedPlayers.has(row.cells[0].textContent)) row.classList.add('selected');
+        });
+      });
+    });
+  }
+
+  function showComparison(){
+    if(selectedPlayers.size<2) return alert('Select at least 2 players');
+    const data = loadPlayers().filter(d=>selectedPlayers.has(d.name));
+    const top = Math.max(...data.map(d=>d.latestPower));
+    comparisonContent.innerHTML = '';
+    data.forEach(d=>{
+      const percent = top ? ((d.latestPower/top)*100).toFixed(2) : 0;
+      let colorClass='color-low';
+      if(percent>=80) colorClass='color-high';
+      else if(percent>=50) colorClass='color-mid';
+      const div = document.createElement('div');
+      div.innerHTML = `<strong>${d.name}:</strong> ${formatNumber(d.latestPower)} <span class="${colorClass}">${percent}% of top</span>`;
+      comparisonContent.appendChild(div);
+    });
+    overlay.classList.add('active');
+  }
+
+  compareBtn.addEventListener('click', showComparison);
+  closeOverlay.addEventListener('click', ()=>overlay.classList.remove('active'));
+
+  renderTable();
+})();
+</script>
+</body>
+</html>
