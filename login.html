@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Login — Player Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  body { margin:0; font-family: Inter, sans-serif; background:#f8fafc; display:flex; justify-content:center; align-items:center; height:100vh; }
+  .login-card { background:#fff; padding:2rem; border-radius:12px; box-shadow:0 6px 20px rgba(0,0,0,0.1); text-align:center; }
+  h1 { font-size:1.5rem; margin-bottom:1rem; color:#1e293b; }
+  .login-btn { background:#4285F4; color:#fff; border:none; padding:.75rem 1.5rem; border-radius:8px; font-size:1rem; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:.5rem; }
+  .login-btn img { width:20px; height:20px; }
+  .login-btn:hover { opacity:.95; }
+</style>
+</head>
+<body>
+
+<div class="login-card">
+  <h1>Sign in to Dashboard</h1>
+  <button class="login-btn" id="googleSignInBtn">
+    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google logo" />
+    Sign in with Google
+  </button>
+</div>
+
+<!-- Firebase SDKs -->
+<script src="https://www.gstatic.com/firebasejs/9.30.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.30.0/firebase-auth-compat.js"></script>
+
+<script>
+  // Firebase config
+  const firebaseConfig = {
+    apiKey: "AIzaSyAyhGftf_DfotmvL4iLx60NT98BjkbG6DM",
+    authDomain: "powercompare-bafd9.firebaseapp.com",
+    projectId: "powercompare-bafd9",
+    storageBucket: "powercompare-bafd9.firebasestorage.app",
+    messagingSenderId: "768897803088",
+    appId: "1:768897803088:web:ff55aed87037cef6720255",
+    measurementId: "G-09ENH5L0VG"
+  };
+
+  // Initialize Firebase
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+
+  // Google Sign-In
+  const provider = new firebase.auth.GoogleAuthProvider();
+
+  document.getElementById('googleSignInBtn').addEventListener('click', () => {
+    auth.signInWithPopup(provider)
+      .then(result => {
+        console.log('User:', result.user);
+        window.location.href = "power.html"; 
+      })
+      .catch(error => {
+        console.error(error);
+        alert('Login failed: ' + error.message);
+      });
+  });
+
+  // Redirect if already signed in
+  auth.onAuthStateChanged(user => {
+    if(user){
+      window.location.href = "power.html";
+    }
+  });
+</script>
+
+</body>
+</html>
