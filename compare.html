@@ -4,69 +4,38 @@
 <meta charset="UTF-8">
 <title>Compare Players — Power</title>
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-:root{
-  --bg:#f8fafc;
-  --text:#1e293b;
-  --card:#ffffff;
-  --accent:#3b82f6;
-  --muted:#475569;
-}
-body{margin:0;font-family:Inter,system-ui;background:var(--bg);color:var(--text);}
-header{
-  background:#1e40af;color:#fff;padding:1rem 1.5rem;
-  display:flex;justify-content:space-between;align-items:center;
-  box-shadow:0 2px 4px rgba(0,0,0,.08);
-}
+body{margin:0;font-family:Inter,sans-serif;background:#f8fafc;color:#1e293b;}
+header{background:#1e40af;color:#fff;padding:1rem 1.5rem;display:flex;justify-content:space-between;align-items:center;}
 header h1{margin:0;font-size:1.5rem;font-weight:600;}
-.toggle-btn{
-  background:none;border:2px solid var(--accent);color:var(--accent);
-  padding:.45rem .7rem;border-radius:8px;cursor:pointer;font-weight:600;
-}
-nav{
-  display:flex;justify-content:center;gap:10px;
-  padding:.75rem;background:#e2e8f0;
-}
-nav a{
-  background:var(--accent);color:#fff;padding:.6rem 1rem;
-  border-radius:6px;text-decoration:none;font-weight:600;
-}
+nav{display:flex;justify-content:center;gap:10px;padding:.75rem;background:#e2e8f0;}
+nav a{background:#3b82f6;color:#fff;padding:.6rem 1rem;border-radius:6px;text-decoration:none;font-weight:600;}
 main{max-width:1200px;margin:1.5rem auto;padding:0 1rem;}
-.section{
-  background:var(--card);padding:1rem;border-radius:12px;
-  box-shadow:0 6px 20px rgba(2,6,23,0.04);
-}
+.section{background:#fff;padding:1rem;border-radius:12px;box-shadow:0 6px 20px rgba(2,6,23,0.04);}
 .section h2{font-size:1.25rem;margin-bottom:1rem;}
 .controls{display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1rem;}
 .filter-group{display:flex;flex-direction:column;gap:.3rem;}
-.filter-group label{font-weight:500;color:var(--muted);}
-.filter-group select{
-  padding:.5rem;border-radius:6px;border:1px solid #e2e8f0;
-  background:var(--card);color:var(--text);
-}
-.filter-group button{
-  padding:.5rem 1rem;border-radius:6px;border:0;
-  background:#6b7280;color:#fff;font-weight:600;cursor:pointer;
-}
+.filter-group label{font-weight:500;color:#475569;}
+.filter-group select{padding:.5rem;border-radius:6px;border:1px solid #e2e8f0;background:#fff;color:#1e293b;}
+.filter-group button{padding:.5rem 1rem;border-radius:6px;border:0;background:#6b7280;color:#fff;font-weight:600;cursor:pointer;}
 .filter-group button:hover{background:#4b5563;}
-body.dark-mode{
-  --bg:#0f172a;--text:#facc15;--card:#111827;--accent:#fbbf24;
+/* Overlay */
+#overlay{
+  position:fixed;top:0;left:0;width:100%;height:100%;
+  background:rgba(0,0,0,0.5);display:none;align-items:center;justify-content:center;
+  z-index:1000;
 }
-body.dark-mode header{background:#111827;}
-body.dark-mode nav{background:#111827;}
-body.dark-mode nav a{background:var(--accent);color:#0f172a;}
-body.dark-mode .section{background:#0b1320;color:var(--text);}
-body.dark-mode select{background:#1f2937;color:#facc15;}
-body.dark-mode .filter-group button{background:#fbbf24;color:#0f172a;}
+#overlay table{background:#fff;color:#1e293b;border-collapse:collapse;border-radius:8px;overflow:hidden;min-width:300px;}
+#overlay th, #overlay td{padding:.6rem 1rem;border-bottom:1px solid #ccc;text-align:center;}
+#overlay th{background:#3b82f6;color:#fff;}
+#overlay button{margin:.5rem;padding:.5rem 1rem;border:none;border-radius:6px;background:#ef4444;color:#fff;font-weight:600;cursor:pointer;}
 </style>
 </head>
 <body>
 
 <header>
-  <h1>Compare Players — Power</h1>
-  <button class="toggle-btn" id="darkToggle">🌙</button>
+  <h1>Compare Players</h1>
 </header>
 
 <nav>
@@ -76,107 +45,79 @@ body.dark-mode .filter-group button{background:#fbbf24;color:#0f172a;}
 
 <main>
 <section class="section">
-  <h2>Player Power Comparison</h2>
-
+  <h2>Select Players to Compare</h2>
   <div class="controls">
     <div class="filter-group">
-      <label for="playerSelect">Select Players</label>
+      <label for="playerSelect">Players</label>
       <select id="playerSelect" multiple size="6"></select>
     </div>
     <div class="filter-group">
       <label>&nbsp;</label>
-      <button id="resetBtn">Reset Selection</button>
+      <button id="compareBtn">Compare</button>
+      <button id="resetBtn">Reset</button>
     </div>
   </div>
-
-  <canvas id="powerChart"></canvas>
 </section>
 </main>
 
+<!-- Overlay -->
+<div id="overlay">
+  <div>
+    <table id="compareTable"></table>
+    <div style="text-align:center"><button id="closeOverlay">Close</button></div>
+  </div>
+</div>
+
 <script>
-// Load data from localStorage (same key as dailyPower.html / index.html)
-function loadData() {
-  try { return JSON.parse(localStorage.getItem('formData') || '[]'); }
-  catch(e){ return []; }
+// Load data
+function loadData(){ try { return JSON.parse(localStorage.getItem('formData')||'[]'); } catch(e){return [];}}
+
+// Populate player select
+function populatePlayers(){
+  const data=loadData();
+  const players=[...new Set(data.map(e=>e.name))].sort();
+  document.getElementById('playerSelect').innerHTML=players.map(p=>`<option value="${p}">${p}</option>`).join('');
 }
 
-const playerColors = {};
-function randColor() {
-  return `rgb(${Math.floor(Math.random()*200)},${Math.floor(Math.random()*200)},${Math.floor(Math.random()*200)})`;
-}
-
-function populatePlayers() {
-  const data = loadData();
-  const players = [...new Set(data.map(e=>e.name))].filter(Boolean).sort();
-  const select = document.getElementById("playerSelect");
-  select.innerHTML = players.map(p=>`<option value="${p}">${p}</option>`).join('');
-}
-
-let chart;
-function updateChart() {
-  const data = loadData();
-  const selectedPlayers = [...document.getElementById("playerSelect").options]
-                          .filter(o=>o.selected).map(o=>o.value);
-
-  const ctx = document.getElementById("powerChart").getContext("2d");
-  if(chart) chart.destroy();
-
-  if(selectedPlayers.length === 0) {
-    chart = new Chart(ctx,{type:'line',data:{labels:[],datasets:[]},options:{responsive:true}});
-    return;
-  }
-
-  // Get sorted dates
-  const dates = [...new Set(data.map(d=>d.date))].filter(Boolean).sort();
-
-  const datasets = selectedPlayers.map(player=>{
-    const records = data.filter(d=>d.name===player).sort((a,b)=>a.date.localeCompare(b.date));
-    if(!playerColors[player]) playerColors[player] = randColor();
-
-    return {
-      label: player,
-      data: dates.map(d=>{
-        const entry = records.find(e=>e.date===d);
-        return entry ? entry.power : null;
-      }),
-      borderColor: playerColors[player],
-      fill:false,
-      tension:0.1
-    };
+// Compare overlay
+function showOverlay(){
+  const selected=[...document.getElementById('playerSelect').options].filter(o=>o.selected).map(o=>o.value);
+  if(selected.length<2){ alert('Select at least 2 players'); return; }
+  const data=loadData();
+  const table=document.getElementById('compareTable');
+  table.innerHTML='<tr><th>Player</th><th>Current Power</th><th>Previous Power</th><th>% Change</th></tr>';
+  let topPower=0;
+  const rows=[];
+  selected.forEach(name=>{
+    const entries=data.filter(d=>d.name===name).sort((a,b)=>new Date(a.date)-new Date(b.date));
+    if(!entries.length) return;
+    const latest=entries[entries.length-1];
+    const prev=entries.length>1?entries[entries.length-2]:latest;
+    const change=prev.power?((latest.power-prev.power)/prev.power*100):0;
+    if(latest.power>topPower) topPower=latest.power;
+    rows.push({name,latest,prev,change});
   });
-
-  chart = new Chart(ctx,{
-    type:'line',
-    data:{labels:dates,datasets},
-    options:{
-      responsive:true,
-      plugins:{legend:{position:'top'}},
-      scales:{y:{beginAtZero:true,title:{display:true,text:'Power'}}}
-    }
+  // Add relative % color
+  table.innerHTML+='';
+  rows.forEach(r=>{
+    let relative=(r.latest.power/topPower*100).toFixed(1);
+    table.innerHTML+=`<tr>
+      <td>${r.name}</td>
+      <td>${r.latest.power.toLocaleString()}</td>
+      <td>${r.prev.power.toLocaleString()}</td>
+      <td style="color:${r.change>=0?'green':'red'}">${r.change>=0?'+':''}${r.change.toFixed(1)}%</td>
+    </tr>`;
   });
+  document.getElementById('overlay').style.display='flex';
 }
-
-// Reset selection
-document.getElementById("resetBtn").onclick = ()=>{
-  [...document.getElementById("playerSelect").options].forEach(o=>o.selected=false);
-  updateChart();
-};
-
-document.getElementById("playerSelect").addEventListener("change", updateChart);
-
-// Dark mode toggle
-const toggle = document.getElementById("darkToggle");
-if(localStorage.getItem("theme")==="dark") document.body.classList.add("dark-mode");
-toggle.onclick = ()=>{
-  document.body.classList.toggle("dark-mode");
-  localStorage.setItem("theme",
-    document.body.classList.contains("dark-mode")?"dark":"light"
-  );
-};
 
 // Init
 populatePlayers();
-updateChart();
+document.getElementById('compareBtn').onclick=showOverlay;
+document.getElementById('resetBtn').onclick=()=>{
+  [...document.getElementById('playerSelect').options].forEach(o=>o.selected=false);
+};
+document.getElementById('closeOverlay').onclick=()=>document.getElementById('overlay').style.display='none';
 </script>
 
 </body>
