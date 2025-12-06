@@ -2,11 +2,13 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Power Dashboard</title>
+<title>Compare Players</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
+
 <style>
 body{font-family:Inter,sans-serif;background:#f8fafc;color:#1e293b;margin:0;}
 header{background:#1e40af;color:#fff;padding:1rem 1.5rem;display:flex;justify-content:space-between;align-items:center;}
@@ -14,39 +16,56 @@ header h1{margin:0;font-size:1.5rem;}
 nav{display:flex;justify-content:center;gap:10px;padding:.75rem;background:#e2e8f0;}
 nav a{background:#3b82f6;color:#fff;padding:.6rem 1rem;border-radius:6px;text-decoration:none;font-weight:600;}
 nav a:hover{opacity:.9;transform:translateY(-1px);}
-main{max-width:900px;margin:1.5rem auto;padding:0 1rem;}
-table{width:100%;border-collapse:collapse;margin-top:1rem;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 6px 20px rgba(2,6,23,0.04);}
-th,td{padding:.6rem .8rem;text-align:left;border-bottom:1px solid #ccc;}
-th{background:#e2e8f0;}
-td.number{text-align:right;}
-.top{font-weight:700;color:#059669;}
+main{max-width:1200px;margin:1.5rem auto;padding:0 1rem;}
+.section{background:#fff;padding:1rem;border-radius:12px;box-shadow:0 6px 20px rgba(2,6,23,0.04);}
+.filter-group{display:flex;flex-direction:column;margin-bottom:1rem;}
+.filter-group select{padding:.5rem;border-radius:6px;border:1px solid #e2e8f0;}
+button{margin-top:0.5rem;padding:.5rem 1rem;background:#3b82f6;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600;}
+button:hover{opacity:.9;}
+/* Overlay */
+#overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);display:none;justify-content:center;align-items:center;}
+#overlayContent{background:#fff;padding:1.5rem;border-radius:12px;max-width:500px;width:90%;}
+#overlayContent h3{margin-top:0;}
+#overlayContent table{width:100%;border-collapse:collapse;margin-top:1rem;}
+#overlayContent th, #overlayContent td{padding:.5rem .7rem;border:1px solid #ccc;text-align:right;}
+#overlayContent th{text-align:left;background:#f0f0f0;}
+#overlayClose{margin-top:1rem;padding:.4rem .8rem;background:#ef4444;color:#fff;border:none;border-radius:6px;cursor:pointer;}
+#overlayClose:hover{opacity:.9;}
 </style>
 </head>
 <body>
 
 <header>
-  <h1>Power Dashboard</h1>
+  <h1>Compare Players</h1>
 </header>
 
 <nav>
+  <a href="index.html">Dashboard</a>
   <a href="power.html">Add / Edit Power</a>
-  <a href="compare.html">Compare</a>
 </nav>
 
 <main>
-  <table id="playerTable">
-    <thead>
-      <tr>
-        <th>Player</th>
-        <th>Current Power</th>
-        <th>Previous Power</th>
-        <th>% Change</th>
-        <th>% vs Top</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
+<div class="section">
+  <div class="filter-group">
+    <label>Select Players to Compare</label>
+    <select id="playerSelect" multiple size="6"></select>
+    <button id="compareBtn">Compare</button>
+  </div>
+  <canvas id="compareChart"></canvas>
+</div>
 </main>
+
+<!-- Overlay -->
+<div id="overlay">
+  <div id="overlayContent">
+    <h3>Player Comparison</h3>
+    <table id="comparisonTable">
+      <thead><tr><th>Player</th><th>Power</th><th>% vs Top</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <button id="overlayClose">Close</button>
+  </div>
+</div>
 
 <script>
 const firebaseConfig = {
@@ -58,58 +77,91 @@ const firebaseConfig = {
   appId: "1:768897803088:web:ff55aed87037cef6720255",
   measurementId: "G-09ENH5L0VG"
 };
-
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
+const playerSelect = document.getElementById('playerSelect');
+const ctx = document.getElementById('compareChart').getContext('2d');
+let chart=null;
+const colors={};
+
+function randColor(){ return `rgb(${Math.floor(Math.random()*255)},${Math.floor(Math.random()*255)},${Math.floor(Math.random()*255)})`; }
 function formatNumber(n){ return n.toLocaleString(); }
 function formatPercent(n){ return n.toFixed(2)+'%'; }
 
-function loadDashboard(){
+function loadPlayers(){
   db.collection('powerData').orderBy('date','asc').get().then(snapshot=>{
-    const players = {};
-    snapshot.forEach(doc=>{
-      const data = doc.data();
-      if(!players[data.name]) players[data.name]=[];
-      players[data.name].push(data);
-    });
-
-    // Determine top power
-    let topPower = 0;
-    for(const p in players){
-      const latest = players[p][players[p].length-1];
-      if(latest.power>topPower) topPower=latest.power;
-    }
-
-    // Build table rows
-    const rows = [];
-    for(const p in players){
-      const entries = players[p];
-      const latest = entries[entries.length-1];
-      const prev = entries.length>1 ? entries[entries.length-2] : null;
-      const change = prev ? ((latest.power - prev.power)/prev.power*100) : 0;
-      const relative = topPower ? (latest.power/topPower*100) : 0;
-      rows.push(`
-        <tr>
-          <td>${p}</td>
-          <td class="number">${formatNumber(latest.power)}</td>
-          <td class="number">${prev ? formatNumber(prev.power) : '-'}</td>
-          <td class="number">${change>=0?'+':''}${formatPercent(change)}</td>
-          <td class="number">${formatPercent(relative)}</td>
-        </tr>
-      `);
-    }
-
-    document.querySelector('#playerTable tbody').innerHTML =
-      rows.sort((a,b)=>{
-        const pa=parseInt(a.match(/<td class="number">([\d,]+)/)[1].replace(/,/g,''),10);
-        const pb=parseInt(b.match(/<td class="number">([\d,]+)/)[1].replace(/,/g,''),10);
-        return pb-pa;
-      }).join('');
+    const players=[...new Set(snapshot.docs.map(d=>d.data().name))].sort();
+    playerSelect.innerHTML = players.map(p=>`<option value="${p}">${p}</option>`).join('');
   });
 }
 
-loadDashboard();
+function updateChart(){
+  const selected=[...playerSelect.options].filter(o=>o.selected).map(o=>o.value);
+  if(selected.length===0){ if(chart) chart.destroy(); return; }
+
+  db.collection('powerData').orderBy('date','asc').get().then(snapshot=>{
+    const dates=[...new Set(snapshot.docs.map(d=>d.data().date))].sort();
+    const datasets=selected.map(name=>{
+      const records = snapshot.docs.filter(d=>d.data().name===name).map(d=>d.data());
+      if(!colors[name]) colors[name]=randColor();
+      return {
+        label:name,
+        data:dates.map(d=>{
+          const rec=records.find(r=>r.date===d);
+          return rec ? rec.power : null;
+        }),
+        borderColor:colors[name],
+        fill:false,
+        tension:0.1
+      };
+    });
+
+    if(chart) chart.destroy();
+    chart=new Chart(ctx,{type:'line',data:{labels:dates,datasets},options:{responsive:true,scales:{y:{beginAtZero:true}}}});
+  });
+}
+
+// Overlay comparison
+const overlay=document.getElementById('overlay');
+const overlayClose=document.getElementById('overlayClose');
+const compareBtn=document.getElementById('compareBtn');
+
+compareBtn.addEventListener('click',()=>{
+  const selected=[...playerSelect.options].filter(o=>o.selected).map(o=>o.value);
+  if(selected.length===0) return alert("Select at least one player");
+
+  db.collection('powerData').orderBy('date','asc').get().then(snapshot=>{
+    let topPower=0;
+    const latestData={};
+    snapshot.docs.forEach(d=>{
+      const data=d.data();
+      if(selected.includes(data.name)){
+        latestData[data.name]=data;
+        if(data.power>topPower) topPower=data.power;
+      }
+    });
+
+    const tbody=document.querySelector('#comparisonTable tbody');
+    tbody.innerHTML='';
+    for(const p of selected){
+      const data=latestData[p];
+      tbody.innerHTML+=`
+        <tr>
+          <td style="text-align:left">${p}</td>
+          <td>${formatNumber(data.power)}</td>
+          <td>${formatPercent((data.power/topPower)*100)}</td>
+        </tr>
+      `;
+    }
+    overlay.style.display='flex';
+  });
+});
+
+overlayClose.addEventListener('click',()=>{overlay.style.display='none';});
+
+playerSelect.addEventListener('change',updateChart);
+loadPlayers();
 </script>
 
 </body>
