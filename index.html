@@ -90,66 +90,65 @@ auth.onAuthStateChanged(user=>{
 });
 
 // Sign out
-document.getElementById("signOutBtn").onclick = ()=> auth.signOut().then(()=>location.href="login.html");
+document.getElementById("signOutBtn").onclick =
+  ()=> auth.signOut().then(()=>location.href="login.html");
 
 let selectedPlayers = [];
 
+// 🔥 LOAD PLAYERS FROM THE CORRECT PATH (matching power.html)
 async function loadPlayers(){
   const user = auth.currentUser;
+  if (!user) return;
+
   const tbody = document.querySelector("#playerTable tbody");
   tbody.innerHTML = '';
-  
-  if (!user) return; 
 
-  // Fetch all entries, ordered by player and date
-  // Uses the stable path: /powers/{uid}/entries
-  const snapshot = await db.collection('powers').doc(user.uid).collection('entries')
-                           .orderBy('player', 'asc')
-                           .orderBy('date', 'asc') 
-                           .get();
+  // Pull entries from: powers/{uid}/entries
+  const snapshot = await db.collection("powers")
+    .doc(user.uid)
+    .collection("entries")
+    .orderBy("player", "asc")
+    .orderBy("timestamp", "asc")
+    .get();
 
-  const playerEntries = {}; // {playerName: {date: maxPower, date: maxPower, ...}}
+  const playerEntries = {};
 
-  // 1. Group entries by player and find the HIGHEST power for each unique date
-  snapshot.forEach(doc=>{
+  snapshot.forEach(doc => {
     const d = doc.data();
-    const name = d.player; // 💡 CORRECT: Accessing the 'player' field
-    const date = d.date.substring(0, 10); // Standardize date format
+    const name = d.player;
+    const date = d.date.substring(0,10);
 
-    if(!playerEntries[name]) playerEntries[name] = {};
-    
-    // Store the maximum power recorded for that specific date
-    playerEntries[name][date] = Math.max(playerEntries[name][date] || 0, d.power);
+    if (!playerEntries[name]) playerEntries[name] = {};
+    playerEntries[name][date] =
+      Math.max(playerEntries[name][date] || 0, d.power);
   });
 
-  // 2. Calculate and render stats for each player
-  Object.entries(playerEntries).forEach(([name, datedPowers])=>{
-    const dates = Object.keys(datedPowers).sort();
+  Object.entries(playerEntries).forEach(([name, datesObj]) => {
+    const dates = Object.keys(datesObj).sort();
 
-    // Get the two most recent unique dates
     const latestDate = dates[dates.length - 1];
     const previousDate = dates.length > 1 ? dates[dates.length - 2] : null;
 
-    const curr = datedPowers[latestDate];
-    const prev = previousDate ? datedPowers[previousDate] : 0;
-    
-    // Calculate Change
-    const change = prev > 0 ? ((curr - prev) / prev * 100) : (curr > 0 ? Infinity : 0);
-    const changeDisplay = change === Infinity ? '+∞%' : `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`;
+    const curr = datesObj[latestDate];
+    const prev = previousDate ? datesObj[previousDate] : 0;
 
-    const tr = document.createElement('tr');
+    const change = prev > 0 ? ((curr - prev) / prev * 100) : (curr > 0 ? Infinity : 0);
+    const changeDisplay = change === Infinity ? "+∞%" :
+      `${change >= 0 ? "+" : ""}${change.toFixed(2)}%`;
+
+    const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${name}</td>
       <td>${prev.toLocaleString()}</td>
       <td>${curr.toLocaleString()}</td>
       <td class="percent">${changeDisplay}</td>
     `;
-    tr.onclick = ()=> selectPlayer(tr, name, prev, curr);
+    tr.onclick = () => selectPlayer(tr, name, prev, curr);
     tbody.appendChild(tr);
   });
 }
 
-// Click to select for comparison
+// Select player for comparison
 function selectPlayer(tr, name, prev, curr){
   if(selectedPlayers.find(p=>p.name===name)){
     selectedPlayers = selectedPlayers.filter(p=>p.name!==name);
@@ -159,8 +158,7 @@ function selectPlayer(tr, name, prev, curr){
     tr.classList.add('selected');
   }
 
-  // Automatically show comparison overlay if two or more players are selected
-  if(selectedPlayers.length>1) showOverlay();
+  if(selectedPlayers.length > 1) showOverlay();
 }
 
 // Show overlay
@@ -168,8 +166,9 @@ function showOverlay(){
   const overlay = document.getElementById("compareOverlay");
   const container = document.getElementById("comparisonResult");
   container.innerHTML = selectedPlayers.map(p=>{
-    const change = p.prev > 0 ? ((p.curr - p.prev) / p.prev * 100) : (p.curr > 0 ? Infinity : 0);
-    const changeDisplay = change === Infinity ? '+∞%' : `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`;
+    const change = p.prev > 0 ? ((p.curr-p.prev)/p.prev*100) : (p.curr>0 ? Infinity : 0);
+    const changeDisplay = change === Infinity ? "+∞%" :
+      `${change>=0?'+':''}${change.toFixed(2)}%`;
     return `<p><strong>${p.name}</strong>: Current=${p.curr.toLocaleString()}, Previous=${p.prev.toLocaleString()}, Change=${changeDisplay}</p>`;
   }).join('');
   overlay.classList.add("visible");
