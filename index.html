@@ -5,7 +5,6 @@
 <title>Player Dashboard</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
@@ -24,8 +23,6 @@ table{width:100%;border-collapse:collapse;margin-top:1rem;}
 th,td{padding:.6rem;border-bottom:1px solid #ccc;text-align:left;}
 td.percent{text-align:right;}
 tr.selected{background:rgba(59,130,246,0.2);}
-.positive{color:#16a34a;font-weight:600;}
-.negative{color:#dc2626;font-weight:600;}
 .overlay{
   position:fixed;top:0;left:0;width:100%;height:100%;
   background:rgba(0,0,0,0.5);display:flex;justify-content:center;align-items:center;
@@ -86,107 +83,90 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 
-let uid = null;
 let selectedPlayers = [];
 
-// Auth check
-auth.onAuthStateChanged(user=>{
-  if(!user) return location.href="login.html";
-  uid = user.uid;
-  loadPlayersAndLatestEntries();
+// Redirect if not logged in
+auth.onAuthStateChanged(user => {
+  if(!user) {
+    location.href="login.html";
+  } else {
+    listenPlayerEntries(user.uid);
+  }
 });
 
 // Sign out
-document.getElementById("signOutBtn").onclick = () =>
-  auth.signOut().then(()=>location.href="login.html");
+document.getElementById("signOutBtn").onclick = () => auth.signOut().then(()=>location.href="login.html");
 
+// Listen for real-time updates
+function listenPlayerEntries(uid) {
+  db.collection("powers").doc(uid).collection("entries")
+    .orderBy("date","asc")
+    .onSnapshot(snapshot => {
+      const playerData = {};
+      snapshot.forEach(doc => {
+        const {player, power, date} = doc.data();
+        if(!playerData[player]) playerData[player] = [];
+        playerData[player].push({date, power});
+      });
+      renderTable(playerData);
+    });
+}
 
-// ---------------------------------------------------------------
-// LOAD PLAYERS + LATEST TWO ENTRIES
-// ---------------------------------------------------------------
-async function loadPlayersAndLatestEntries() {
-  const playersSnap = await db.collection("powers").doc(uid).collection("players").orderBy("name").get();
-
+// Render table with previous & current power
+function renderTable(data) {
   const tbody = document.querySelector("#playerTable tbody");
-  tbody.innerHTML = "";
+  tbody.innerHTML = '';
 
-  for (const playerDoc of playersSnap.docs) {
-    const name = playerDoc.data().name;
-    const playerId = playerDoc.id;
+  Object.entries(data).forEach(([player, entries]) => {
+    // Sort by date ascending
+    entries.sort((a,b) => new Date(a.date) - new Date(b.date));
+    const current = entries[entries.length-1].power;
+    const previous = entries.length > 1 ? entries[entries.length-2].power : 0;
+    const change = previous>0 ? ((current-previous)/previous*100) : (current>0 ? Infinity : 0);
+    const changeDisplay = change===Infinity ? '+∞%' : `${change>=0?'+':''}${change.toFixed(2)}%`;
 
-    // Get last 2 entries
-    const entriesSnap = await db.collection("powers").doc(uid)
-      .collection("players").doc(playerId)
-      .collection("entries")
-      .orderBy("date", "desc")
-      .limit(2)
-      .get();
-
-    let latest = 0;
-    let previous = 0;
-
-    if (entriesSnap.docs.length > 0)
-      latest = entriesSnap.docs[0].data().power;
-
-    if (entriesSnap.docs.length > 1)
-      previous = entriesSnap.docs[1].data().power;
-
-    const change = previous > 0 ? ((latest - previous) / previous * 100) : 0;
-    const changeClass = change >= 0 ? "positive" : "negative";
-    const changeDisplay = `${change >= 0 ? "+" : ""}${change.toFixed(2)}%`;
-
-    const tr = document.createElement("tr");
+    const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td>${name}</td>
+      <td>${player}</td>
       <td>${previous.toLocaleString()}</td>
-      <td>${latest.toLocaleString()}</td>
-      <td class="percent ${changeClass}">${changeDisplay}</td>
+      <td>${current.toLocaleString()}</td>
+      <td class="percent">${changeDisplay}</td>
     `;
-    tr.onclick = () => selectPlayer(tr, name, previous, latest);
-
+    tr.onclick = ()=> toggleSelect(tr, player, previous, current);
     tbody.appendChild(tr);
-  }
+  });
 }
 
-
-// ---------------------------------------------------------------
-// COMPARISON SELECTION
-// ---------------------------------------------------------------
-function selectPlayer(row, name, prev, curr) {
-  if (selectedPlayers.find(p => p.name === name)) {
-    selectedPlayers = selectedPlayers.filter(p => p.name !== name);
-    row.classList.remove("selected");
+// Handle selection for comparison
+function toggleSelect(tr, name, prev, curr) {
+  const index = selectedPlayers.findIndex(p => p.name===name);
+  if(index>-1) {
+    selectedPlayers.splice(index,1);
+    tr.classList.remove('selected');
   } else {
-    selectedPlayers.push({ name, prev, curr });
-    row.classList.add("selected");
+    selectedPlayers.push({name, prev, curr});
+    tr.classList.add('selected');
   }
-
-  if (selectedPlayers.length > 1) showOverlay();
+  if(selectedPlayers.length>1) showOverlay();
 }
 
-
-// ---------------------------------------------------------------
-// OVERLAY
-// ---------------------------------------------------------------
+// Overlay
 function showOverlay() {
   const overlay = document.getElementById("compareOverlay");
-  const box = document.getElementById("comparisonResult");
-
-  box.innerHTML = selectedPlayers.map(p => {
-    const change = p.prev > 0 ? ((p.curr - p.prev)/p.prev*100) : 0;
-    const cd = `${change >= 0 ? "+" : ""}${change.toFixed(2)}%`;
-    return `<p><strong>${p.name}</strong><br>Previous: ${p.prev.toLocaleString()}<br>Current: ${p.curr.toLocaleString()}<br>Change: ${cd}</p>`;
-  }).join("<hr>");
-
+  const container = document.getElementById("comparisonResult");
+  container.innerHTML = selectedPlayers.map(p=>{
+    const change = p.prev>0 ? ((p.curr-p.prev)/p.prev*100) : (p.curr>0 ? Infinity : 0);
+    const changeDisplay = change===Infinity ? '+∞%' : `${change>=0?'+':''}${change.toFixed(2)}%`;
+    return `<p><strong>${p.name}</strong>: Current=${p.curr.toLocaleString()}, Previous=${p.prev.toLocaleString()}, Change=${changeDisplay}</p>`;
+  }).join('');
   overlay.classList.add("visible");
 }
 
 function closeOverlay() {
-  selectedPlayers = [];
-  document.querySelectorAll("#playerTable tr").forEach(r => r.classList.remove("selected"));
+  selectedPlayers=[];
+  document.querySelectorAll("#playerTable tr").forEach(tr=>tr.classList.remove('selected'));
   document.getElementById("compareOverlay").classList.remove("visible");
 }
 </script>
-
 </body>
 </html>
