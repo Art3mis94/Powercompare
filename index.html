@@ -99,40 +99,42 @@ async function loadPlayers(){
   const tbody = document.querySelector("#playerTable tbody");
   tbody.innerHTML = '';
   
-  if (!user) return; // safety check
+  if (!user) return; 
 
-  // 1. Fetch all entries, ordered by player and date
+  // Fetch all entries, ordered by player and date
+  // Uses the stable path: /powers/{uid}/entries
   const snapshot = await db.collection('powers').doc(user.uid).collection('entries')
                            .orderBy('player', 'asc')
                            .orderBy('date', 'asc') 
                            .get();
 
-  const playerEntries = {}; // {playerName: [{date: '2023-11-01', power: 100}, ...]}
+  const playerEntries = {}; // {playerName: {date: maxPower, date: maxPower, ...}}
 
-  // 2. Group entries by player and process them to find unique dates and highest power per date
+  // 1. Group entries by player and find the HIGHEST power for each unique date
   snapshot.forEach(doc=>{
     const d = doc.data();
-    const name = d.player; // 💡 CORRECTED: Use d.player instead of d.name
-    const date = d.date.substring(0, 10); // Ensure date is standardized
+    const name = d.player; // 💡 CORRECT: Accessing the 'player' field
+    const date = d.date.substring(0, 10); // Standardize date format
 
     if(!playerEntries[name]) playerEntries[name] = {};
     
-    // Store the highest power for that specific date
+    // Store the maximum power recorded for that specific date
     playerEntries[name][date] = Math.max(playerEntries[name][date] || 0, d.power);
   });
 
-  // 3. Calculate and render stats for each player
+  // 2. Calculate and render stats for each player
   Object.entries(playerEntries).forEach(([name, datedPowers])=>{
     const dates = Object.keys(datedPowers).sort();
 
+    // Get the two most recent unique dates
     const latestDate = dates[dates.length - 1];
     const previousDate = dates.length > 1 ? dates[dates.length - 2] : null;
 
     const curr = datedPowers[latestDate];
     const prev = previousDate ? datedPowers[previousDate] : 0;
     
+    // Calculate Change
     const change = prev > 0 ? ((curr - prev) / prev * 100) : (curr > 0 ? Infinity : 0);
-
     const changeDisplay = change === Infinity ? '+∞%' : `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`;
 
     const tr = document.createElement('tr');
@@ -157,6 +159,7 @@ function selectPlayer(tr, name, prev, curr){
     tr.classList.add('selected');
   }
 
+  // Automatically show comparison overlay if two or more players are selected
   if(selectedPlayers.length>1) showOverlay();
 }
 
