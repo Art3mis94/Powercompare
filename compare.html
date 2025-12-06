@@ -27,6 +27,17 @@ main{max-width:1200px;margin:1.5rem auto;padding:0 1rem;}
 .filter-group button:hover{background:#2563eb;}
 .filter-group button#resetBtn{background:#6b7280;}
 .filter-group button#resetBtn:hover{background:#4b5563;}
+/* Chart container styling */
+#chartContainer{
+    position: relative;
+    height: 400px; /* Define a height for the chart */
+    width: 100%;
+    margin-top: 1rem;
+    padding: 1rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: #fdfdfe;
+}
 /* Overlay */
 #overlay{
   position:fixed;top:0;left:0;width:100%;height:100%;
@@ -59,24 +70,38 @@ main{max-width:1200px;margin:1.5rem auto;padding:0 1rem;}
 
 <main>
 <section class="section">
-  <h2>Select Players to Compare</h2>
+  <h2>Comparison Setup</h2>
   <div class="controls">
+    
     <div class="filter-group">
       <label for="playerSelect">Players</label>
       <select id="playerSelect" multiple size="8"></select>
     </div>
+    
+    <div class="filter-group">
+        <label for="comparisonMethod">Chart Method</label>
+        <select id="comparisonMethod">
+            <option value="rawPower">Raw Power (Y-Axis: Total Power)</option>
+            <option value="percentChange">Percent Change (Y-Axis: % Change)</option>
+        </select>
+    </div>
+
     <div class="filter-group">
       <label>&nbsp;</label>
-      <button id="compareBtn">Compare</button>
+      <button id="chartBtn">Generate Chart</button>
+      <button id="compareBtn">Summary Table</button>
       <button id="resetBtn">Reset</button>
     </div>
   </div>
 </section>
 
-<div class="section" style="margin-top: 1.5rem;">
-    <h2>Comparison Chart (Coming Soon)</h2>
-    <p>A power comparison chart will appear here once implemented.</p>
-</div>
+<section class="section" style="margin-top: 1.5rem;">
+    <h2>Power Trend Chart</h2>
+    <div id="chartContainer">
+        <p id="chartStatus">Select players and click "Generate Chart" to view the trend.</p>
+        <canvas id="powerChart" style="display:none;"></canvas>
+    </div>
+</section>
 </main>
 
 <div id="overlay">
@@ -104,6 +129,16 @@ const db = firebase.firestore();
 // Global variable to store all player entries once loaded
 let allPlayerEntries = {}; 
 
+// Utility function to format numbers with commas
+const formatNumber = (num) => {
+    // Check if the number is an integer (for power values)
+    if (Number.isInteger(num)) {
+        return num.toLocaleString();
+    }
+    // For percentages, keep the precision
+    return num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+
 // Redirect if not logged in
 auth.onAuthStateChanged(user=>{
     if(!user) {
@@ -116,35 +151,32 @@ auth.onAuthStateChanged(user=>{
 // Sign out
 document.getElementById("signOutBtn").onclick = ()=> auth.signOut().then(()=>location.href="login.html");
 
-
 /**
  * Loads all entries for the current user and populates the player selection list.
  */
 async function loadAllPlayerEntries(){
+    document.getElementById('chartStatus').textContent = 'Loading player data...';
     const user = auth.currentUser;
     if (!user) return; 
 
-    // Fetch all entries, ordered by date for easier comparison logic
     const snapshot = await db.collection('powers').doc(user.uid).collection('entries')
                              .orderBy('date', 'asc').get();
     
-    // Group entries by player name
     const players = {};
     snapshot.forEach(doc => {
         const data = doc.data();
-        // Convert date string back to Date object for proper sorting/comparison
-        // Use the original ISO string if possible, or new Date() if not
         const date = data.date ? data.date : new Date().toISOString(); 
         
         if (!players[data.name]) players[data.name] = [];
         players[data.name].push({
             power: data.power,
-            date: date // Keep the date as the ISO string for consistent sorting
+            date: date
         });
     });
 
     allPlayerEntries = players;
     populatePlayers();
+    document.getElementById('chartStatus').textContent = 'Select players and click "Generate Chart" to view the trend.';
 }
 
 /**
@@ -156,16 +188,18 @@ function populatePlayers(){
     
     if (playerNames.length === 0) {
         select.innerHTML = '<option disabled>No players found</option>';
+        document.getElementById('chartBtn').disabled = true;
         document.getElementById('compareBtn').disabled = true;
         return;
     }
     
     select.innerHTML = playerNames.map(p => `<option value="${p}">${p}</option>`).join('');
+    document.getElementById('chartBtn').disabled = false;
     document.getElementById('compareBtn').disabled = false;
 }
 
 /**
- * Generates and shows the comparison data in the overlay table.
+ * Generates and shows the summary comparison data in the overlay table.
  */
 function showOverlay(){
     const selectedNames = [...document.getElementById('playerSelect').options]
@@ -178,10 +212,6 @@ function showOverlay(){
     }
 
     const table = document.getElementById('compareTable');
-    // Clear existing content
-    table.innerHTML = ''; 
-
-    // Headers
     table.innerHTML = `
         <tr>
             <th>Player</th>
@@ -198,13 +228,13 @@ function showOverlay(){
         const entries = allPlayerEntries[name];
         if(!entries || entries.length === 0) return;
 
-        // Entries are already sorted by date (ASC) from loadAllPlayerEntries
         const latestEntry = entries[entries.length - 1];
         const previousEntry = entries.length > 1 ? entries[entries.length - 2] : latestEntry;
         
         const currentPower = latestEntry.power;
         const previousPower = previousEntry.power;
 
+        // Calculate percent change, handling division by zero for new players
         const change = previousPower ? ((currentPower - previousPower) / previousPower * 100) : 0;
         
         if(currentPower > topPower) topPower = currentPower;
@@ -219,9 +249,9 @@ function showOverlay(){
         table.innerHTML += `
             <tr>
                 <td>${r.name}</td>
-                <td class="power-val">${r.currentPower.toLocaleString()}</td>
-                <td>${r.previousPower.toLocaleString()}</td>
-                <td style="${changeColor}">${r.change >= 0 ? '+' : ''}${r.change.toFixed(2)}%</td>
+                <td class="power-val">${formatNumber(r.currentPower)}</td>
+                <td>${formatNumber(r.previousPower)}</td>
+                <td style="${changeColor}">${r.change >= 0 ? '+' : ''}${formatNumber(r.change)}%</td>
             </tr>
         `;
     });
@@ -229,8 +259,87 @@ function showOverlay(){
     document.getElementById('overlay').style.display = 'flex';
 }
 
+/**
+ * Prepares data and calls a charting function (placeholder).
+ */
+function generateChart(){
+    const selectedNames = [...document.getElementById('playerSelect').options]
+                           .filter(o => o.selected)
+                           .map(o => o.value);
+    const method = document.getElementById('comparisonMethod').value;
+
+    if(selectedNames.length === 0){ 
+        alert('Select at least one player to generate a chart.'); 
+        return; 
+    }
+    
+    // --- Data Preparation ---
+    const chartData = {};
+    let allDates = new Set();
+    
+    selectedNames.forEach(name => {
+        const entries = allPlayerEntries[name];
+        if(!entries || entries.length === 0) return;
+        
+        // Ensure dates are used as keys for merging datasets
+        const playerSeries = entries.reduce((acc, entry) => {
+            const dateKey = entry.date.substring(0, 10); // Use YYYY-MM-DD for consistency
+            allDates.add(dateKey);
+            acc[dateKey] = entry.power;
+            return acc;
+        }, {});
+        chartData[name] = playerSeries;
+    });
+
+    if (Object.keys(chartData).length === 0) {
+        alert('No data available for the selected players.');
+        return;
+    }
+    
+    const sortedDates = Array.from(allDates).sort();
+
+    // The function below is a placeholder. You would replace this with actual 
+    // chart rendering code using a library like Chart.js, D3.js, etc.
+    renderChartPlaceholder(sortedDates, chartData, method);
+}
+
+/**
+ * PLACEHOLDER FUNCTION: This function simulates chart generation.
+ * You MUST replace this with a real charting library implementation.
+ */
+function renderChartPlaceholder(dates, data, method){
+    const canvas = document.getElementById('powerChart');
+    const status = document.getElementById('chartStatus');
+    
+    // In a real implementation, you'd initialize a Chart.js object here.
+    // For example:
+    // const ctx = canvas.getContext('2d');
+    // new Chart(ctx, { ... data and config based on 'method' ... });
+
+    // Placeholder text update:
+    status.style.display = 'block';
+    canvas.style.display = 'none';
+    
+    let chartTitle = method === 'rawPower' ? 'Raw Power Over Time' : 'Percent Change Over Time';
+    let yAxisLabel = method === 'rawPower' ? 'Power Value' : 'Percent Change (%)';
+    
+    status.innerHTML = `
+        <h3>${chartTitle}</h3>
+        <p>Chart generation logic goes here. The method selected is: <strong>${method}</strong>.</p>
+        <p>The **X-Axis** would be **Date**.</p>
+        <p>The **Y-Axis** would represent the **${yAxisLabel}**.</p>
+        <p>The data points ready to be charted are for dates: ${dates.join(', ')}</p>
+        <p>To implement this, you'll need to include a charting library (e.g., Chart.js) and write the code to draw lines based on the prepared <code>dates</code> and <code>data</code> variables, adjusting the Y-axis scale based on the <code>method</code>.</p>
+    `;
+    
+    // Example of showing the canvas placeholder for styling purposes:
+    // canvas.style.display = 'block'; 
+}
+
+
 // Event listeners
-document.getElementById('compareBtn').onclick = showOverlay;
+document.getElementById('compareBtn').onclick = showOverlay; // Summary Table button
+document.getElementById('chartBtn').onclick = generateChart; // Generate Chart button
 document.getElementById('resetBtn').onclick = ()=>{
     [...document.getElementById('playerSelect').options].forEach(o=>o.selected=false);
 };
