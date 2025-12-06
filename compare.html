@@ -5,10 +5,15 @@
 <title>Compare Players — Power</title>
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <style>
 body{margin:0;font-family:Inter,sans-serif;background:#f8fafc;color:#1e293b;}
 header{background:#1e40af;color:#fff;padding:1rem 1.5rem;display:flex;justify-content:space-between;align-items:center;}
 header h1{margin:0;font-size:1.5rem;font-weight:600;}
+button.signOut{padding:.5rem 1rem;border-radius:6px;border:none;background:#3b82f6;color:#fff;cursor:pointer;}
+button.signOut:hover{opacity:.9;}
 nav{display:flex;justify-content:center;gap:10px;padding:.75rem;background:#e2e8f0;}
 nav a{background:#3b82f6;color:#fff;padding:.6rem 1rem;border-radius:6px;text-decoration:none;font-weight:600;}
 main{max-width:1200px;margin:1.5rem auto;padding:0 1rem;}
@@ -18,29 +23,38 @@ main{max-width:1200px;margin:1.5rem auto;padding:0 1rem;}
 .filter-group{display:flex;flex-direction:column;gap:.3rem;}
 .filter-group label{font-weight:500;color:#475569;}
 .filter-group select{padding:.5rem;border-radius:6px;border:1px solid #e2e8f0;background:#fff;color:#1e293b;}
-.filter-group button{padding:.5rem 1rem;border-radius:6px;border:0;background:#6b7280;color:#fff;font-weight:600;cursor:pointer;}
-.filter-group button:hover{background:#4b5563;}
+.filter-group button{padding:.5rem 1rem;border-radius:6px;border:0;background:#3b82f6;color:#fff;font-weight:600;cursor:pointer;}
+.filter-group button:hover{background:#2563eb;}
+.filter-group button#resetBtn{background:#6b7280;}
+.filter-group button#resetBtn:hover{background:#4b5563;}
 /* Overlay */
 #overlay{
   position:fixed;top:0;left:0;width:100%;height:100%;
   background:rgba(0,0,0,0.5);display:none;align-items:center;justify-content:center;
   z-index:1000;
 }
-#overlay table{background:#fff;color:#1e293b;border-collapse:collapse;border-radius:8px;overflow:hidden;min-width:300px;}
-#overlay th, #overlay td{padding:.6rem 1rem;border-bottom:1px solid #ccc;text-align:center;}
-#overlay th{background:#3b82f6;color:#fff;}
-#overlay button{margin:.5rem;padding:.5rem 1rem;border:none;border-radius:6px;background:#ef4444;color:#fff;font-weight:600;cursor:pointer;}
+#overlay > div{
+    max-width: 90%;
+    max-height: 90%;
+    overflow: auto;
+}
+#overlay table{background:#fff;color:#1e293b;border-collapse:collapse;border-radius:8px;overflow:hidden;min-width:400px;box-shadow: 0 4px 15px rgba(0,0,0,0.2);}
+#overlay th, #overlay td{padding:.8rem 1.2rem;border-bottom:1px solid #eee;text-align:center;}
+#overlay th{background:#1e40af;color:#fff;position: sticky; top: 0;}
+#overlay td.power-val{font-weight: 600;}
+#overlay button{margin:.8rem;padding:.5rem 1rem;border:none;border-radius:6px;background:#ef4444;color:#fff;font-weight:600;cursor:pointer;}
 </style>
 </head>
 <body>
 
 <header>
   <h1>Compare Players</h1>
+  <button id="signOutBtn" class="signOut">Sign Out</button>
 </header>
 
 <nav>
   <a href="index.html">Dashboard</a>
-  <a href="dailyPower.html">Daily Power</a>
+  <a href="power.html">Add / Edit Power</a>
 </nav>
 
 <main>
@@ -49,7 +63,7 @@ main{max-width:1200px;margin:1.5rem auto;padding:0 1rem;}
   <div class="controls">
     <div class="filter-group">
       <label for="playerSelect">Players</label>
-      <select id="playerSelect" multiple size="6"></select>
+      <select id="playerSelect" multiple size="8"></select>
     </div>
     <div class="filter-group">
       <label>&nbsp;</label>
@@ -58,9 +72,13 @@ main{max-width:1200px;margin:1.5rem auto;padding:0 1rem;}
     </div>
   </div>
 </section>
+
+<div class="section" style="margin-top: 1.5rem;">
+    <h2>Comparison Chart (Coming Soon)</h2>
+    <p>A power comparison chart will appear here once implemented.</p>
+</div>
 </main>
 
-<!-- Overlay -->
 <div id="overlay">
   <div>
     <table id="compareTable"></table>
@@ -69,55 +87,154 @@ main{max-width:1200px;margin:1.5rem auto;padding:0 1rem;}
 </div>
 
 <script>
-// Load data
-function loadData(){ try { return JSON.parse(localStorage.getItem('formData')||'[]'); } catch(e){return [];}}
-
-// Populate player select
-function populatePlayers(){
-  const data=loadData();
-  const players=[...new Set(data.map(e=>e.name))].sort();
-  document.getElementById('playerSelect').innerHTML=players.map(p=>`<option value="${p}">${p}</option>`).join('');
-}
-
-// Compare overlay
-function showOverlay(){
-  const selected=[...document.getElementById('playerSelect').options].filter(o=>o.selected).map(o=>o.value);
-  if(selected.length<2){ alert('Select at least 2 players'); return; }
-  const data=loadData();
-  const table=document.getElementById('compareTable');
-  table.innerHTML='<tr><th>Player</th><th>Current Power</th><th>Previous Power</th><th>% Change</th></tr>';
-  let topPower=0;
-  const rows=[];
-  selected.forEach(name=>{
-    const entries=data.filter(d=>d.name===name).sort((a,b)=>new Date(a.date)-new Date(b.date));
-    if(!entries.length) return;
-    const latest=entries[entries.length-1];
-    const prev=entries.length>1?entries[entries.length-2]:latest;
-    const change=prev.power?((latest.power-prev.power)/prev.power*100):0;
-    if(latest.power>topPower) topPower=latest.power;
-    rows.push({name,latest,prev,change});
-  });
-  // Add relative % color
-  table.innerHTML+='';
-  rows.forEach(r=>{
-    let relative=(r.latest.power/topPower*100).toFixed(1);
-    table.innerHTML+=`<tr>
-      <td>${r.name}</td>
-      <td>${r.latest.power.toLocaleString()}</td>
-      <td>${r.prev.power.toLocaleString()}</td>
-      <td style="color:${r.change>=0?'green':'red'}">${r.change>=0?'+':''}${r.change.toFixed(1)}%</td>
-    </tr>`;
-  });
-  document.getElementById('overlay').style.display='flex';
-}
-
-// Init
-populatePlayers();
-document.getElementById('compareBtn').onclick=showOverlay;
-document.getElementById('resetBtn').onclick=()=>{
-  [...document.getElementById('playerSelect').options].forEach(o=>o.selected=false);
+// Firebase config (Use your actual configuration)
+const firebaseConfig = {
+  apiKey: "AIzaSyAyhGftf_DfotmvL4iLx60NT98BjkbG6DM",
+  authDomain: "powercompare-bafd9.firebaseapp.com",
+  projectId: "powercompare-bafd9",
+  storageBucket: "powercompare-bafd9.firebasestorage.app",
+  messagingSenderId: "768897803088",
+  appId: "1:768897803088:web:ff55aed87037cef6720255",
+  measurementId: "G-09ENH5L0VG"
 };
-document.getElementById('closeOverlay').onclick=()=>document.getElementById('overlay').style.display='none';
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+// Global variable to store all player entries once loaded
+let allPlayerEntries = {}; 
+
+// Redirect if not logged in
+auth.onAuthStateChanged(user=>{
+    if(!user) {
+        location.href="login.html";
+    } else {
+        loadAllPlayerEntries();
+    }
+});
+
+// Sign out
+document.getElementById("signOutBtn").onclick = ()=> auth.signOut().then(()=>location.href="login.html");
+
+
+/**
+ * Loads all entries for the current user and populates the player selection list.
+ */
+async function loadAllPlayerEntries(){
+    const user = auth.currentUser;
+    if (!user) return; 
+
+    // Fetch all entries, ordered by date for easier comparison logic
+    const snapshot = await db.collection('powers').doc(user.uid).collection('entries')
+                             .orderBy('date', 'asc').get();
+    
+    // Group entries by player name
+    const players = {};
+    snapshot.forEach(doc => {
+        const data = doc.data();
+        // Convert date string back to Date object for proper sorting/comparison
+        // Use the original ISO string if possible, or new Date() if not
+        const date = data.date ? data.date : new Date().toISOString(); 
+        
+        if (!players[data.name]) players[data.name] = [];
+        players[data.name].push({
+            power: data.power,
+            date: date // Keep the date as the ISO string for consistent sorting
+        });
+    });
+
+    allPlayerEntries = players;
+    populatePlayers();
+}
+
+/**
+ * Populates the player select element from the loaded data.
+ */
+function populatePlayers(){
+    const playerNames = Object.keys(allPlayerEntries).sort();
+    const select = document.getElementById('playerSelect');
+    
+    if (playerNames.length === 0) {
+        select.innerHTML = '<option disabled>No players found</option>';
+        document.getElementById('compareBtn').disabled = true;
+        return;
+    }
+    
+    select.innerHTML = playerNames.map(p => `<option value="${p}">${p}</option>`).join('');
+    document.getElementById('compareBtn').disabled = false;
+}
+
+/**
+ * Generates and shows the comparison data in the overlay table.
+ */
+function showOverlay(){
+    const selectedNames = [...document.getElementById('playerSelect').options]
+                           .filter(o => o.selected)
+                           .map(o => o.value);
+    
+    if(selectedNames.length < 2){ 
+        alert('Select at least 2 players to compare.'); 
+        return; 
+    }
+
+    const table = document.getElementById('compareTable');
+    // Clear existing content
+    table.innerHTML = ''; 
+
+    // Headers
+    table.innerHTML = `
+        <tr>
+            <th>Player</th>
+            <th>Current Power</th>
+            <th>Previous Power</th>
+            <th>% Change</th>
+        </tr>
+    `;
+    
+    let topPower = 0;
+    const comparisonRows = [];
+
+    selectedNames.forEach(name => {
+        const entries = allPlayerEntries[name];
+        if(!entries || entries.length === 0) return;
+
+        // Entries are already sorted by date (ASC) from loadAllPlayerEntries
+        const latestEntry = entries[entries.length - 1];
+        const previousEntry = entries.length > 1 ? entries[entries.length - 2] : latestEntry;
+        
+        const currentPower = latestEntry.power;
+        const previousPower = previousEntry.power;
+
+        const change = previousPower ? ((currentPower - previousPower) / previousPower * 100) : 0;
+        
+        if(currentPower > topPower) topPower = currentPower;
+        
+        comparisonRows.push({ name, currentPower, previousPower, change });
+    });
+
+    // Generate table rows
+    comparisonRows.forEach(r => {
+        const changeColor = r.change >= 0 ? 'color:green' : 'color:red';
+        
+        table.innerHTML += `
+            <tr>
+                <td>${r.name}</td>
+                <td class="power-val">${r.currentPower.toLocaleString()}</td>
+                <td>${r.previousPower.toLocaleString()}</td>
+                <td style="${changeColor}">${r.change >= 0 ? '+' : ''}${r.change.toFixed(2)}%</td>
+            </tr>
+        `;
+    });
+
+    document.getElementById('overlay').style.display = 'flex';
+}
+
+// Event listeners
+document.getElementById('compareBtn').onclick = showOverlay;
+document.getElementById('resetBtn').onclick = ()=>{
+    [...document.getElementById('playerSelect').options].forEach(o=>o.selected=false);
+};
+document.getElementById('closeOverlay').onclick = ()=>document.getElementById('overlay').style.display='none';
 </script>
 
 </body>
