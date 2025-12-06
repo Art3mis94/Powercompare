@@ -113,7 +113,7 @@
   </main>
 
   <script>
-    // ⚠️ RESTORED FIREBASE CONFIG AND INITIALIZATION ⚠️
+    // Firebase config (Use your actual configuration)
     const firebaseConfig = {
       apiKey: "AIzaSyAyhGftf_DfotmvL4iLx60NT98BjkbG6DM",
       authDomain: "powercompare-bafd9.firebaseapp.com",
@@ -151,10 +151,11 @@
 
     auth.onAuthStateChanged(user => {
         if (!user) {
-            location.href = "login.html"; // ⚠️ RESTORED REDIRECT CHECK ⚠️
+            location.href = "login.html"; 
         } else {
             currentUserUid = user.uid;
-            E.dateInput.valueAsDate = new Date(); // Set default date
+            E.dateInput.valueAsDate = new Date(); 
+            // 💡 This is the critical call that loads the player list from Firebase
             loadAllPlayerNames();
         }
     });
