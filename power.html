@@ -1,212 +1,154 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<title>Add / Edit Power</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
-<style>
-body{font-family:Inter,sans-serif;margin:0;background:#f8fafc;color:#1e293b;}
-header{background:#1e40af;color:#fff;padding:1rem 1.5rem;display:flex;justify-content:space-between;align-items:center;}
-header h1{margin:0;font-size:1.25rem;}
-button{padding:.5rem 1rem;border-radius:6px;border:none;background:#3b82f6;color:#fff;cursor:pointer;}
-button:hover{opacity:.9;}
-nav{display:flex;justify-content:center;gap:10px;padding:.75rem;background:#e2e8f0;}
-nav a{background:#3b82f6;color:#fff;padding:.6rem 1rem;border-radius:6px;text-decoration:none;font-weight:600;}
-nav a:hover{opacity:.9;}
-main{max-width:600px;margin:1.5rem auto;padding:0 1rem;}
-.section{background:#fff;padding:1rem;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,0.05);}
-label{display:block;margin:.5rem 0 .2rem;font-weight:500;}
-input, select{width:100%;padding:.5rem;border-radius:6px;border:1px solid #ccc;margin-bottom:.5rem;}
-table{width:100%;border-collapse:collapse;margin-top:1rem;}
-th, td{padding:.5rem;border-bottom:1px solid #ccc;text-align:left;}
-button.delete{background:#ef4444; margin-right: 5px;}
-button.edit{background:#f59e0b;} /* New Edit button style */
-</style>
-</head>
-<body>
-
-<header>
-  <h1>Add / Edit Power</h1>
-  <button id="signOutBtn">Sign Out</button>
-</header>
-
-<nav>
-  <a href="index.html">Dashboard</a>
-  <a href="compare.html">Compare</a>
-</nav>
-
-<main>
-<div class="section">
-  <label for="playerName">Player Name</label>
-  <input type="text" id="playerName" placeholder="Type new or existing player name">
-
-  <label for="powerInput">Power</label>
-  <input type="number" id="powerInput" placeholder="Enter power value">
-
-  <label for="dateInput">Date</label>
-  <input type="date" id="dateInput">
-  <small>If left empty, today's date will be used.</small>
-
-  <input type="hidden" id="editDocId">
-
-  <button id="saveBtn">Add / Update Power</button>
-  <button id="cancelEditBtn" style="display:none; background:#6b7280;">Cancel Edit</button>
-</div>
-
-<div class="section">
-  <h3>Current Entries (Latest First)</h3>
-  <table>
-    <thead>
-      <tr><th>Player</th><th>Power</th><th>Date</th><th>Action</th></tr>
-    </thead>
-    <tbody id="entryTable"></tbody>
-  </table>
-</div>
-
 <script>
-// Firebase config (Use your actual configuration)
 const firebaseConfig = {
   apiKey: "AIzaSyAyhGftf_DfotmvL4iLx60NT98BjkbG6DM",
   authDomain: "powercompare-bafd9.firebaseapp.com",
   projectId: "powercompare-bafd9",
-  storageBucket: "powercompare-bafd9.firebasestorage.app",
+  storageBucket: "powercompare-bafd9.appspot.com",
   messagingSenderId: "768897803088",
-  appId: "1:768897803088:web:ff55aed87037cef6720255",
-  measurementId: "G-09ENH5L0VG"
+  appId: "1:768897803088:web:ff55aed87037cef6720255"
 };
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 
-// DOM elements
-const playerName = document.getElementById('playerName');
-const powerInput = document.getElementById('powerInput');
-const dateInput = document.getElementById('dateInput');
-const editDocId = document.getElementById('editDocId');
-const saveBtn = document.getElementById('saveBtn');
-const cancelEditBtn = document.getElementById('cancelEditBtn');
+let currentPlayer = null;
+let currentWeek = 'week 1';
+const WEEKS = ['week 1','week 2','week 3'];
 
 // Redirect if not logged in
-auth.onAuthStateChanged(user=>{
-  if(!user) location.href="login.html";
-  else {
-    // Set default date to today
-    dateInput.valueAsDate = new Date();
-    loadEntries();
-  }
+auth.onAuthStateChanged(user => {
+  if (!user) location.href = "login.html";
+  else init();
 });
 
-// Sign out
-document.getElementById("signOutBtn").onclick = ()=> auth.signOut().then(()=>location.href="login.html");
+// === Helper: Firestore paths ===
+function playerDocRef(playerName, week) {
+  const uid = auth.currentUser.uid;
+  return db.collection('powers').doc(uid)
+           .collection('entries').doc(`${playerName}_${week}`);
+}
 
-// --- CRUD Functions ---
+// === Add Player ===
+async function addPlayer(name) {
+  name = name.trim();
+  if (!name) return alert('Enter a name');
 
-async function loadEntries(){
-  const user = auth.currentUser;
-  const snapshot = await db.collection('powers').doc(user.uid).collection('entries').orderBy('date','desc').get();
-  const tbody = document.getElementById('entryTable');
-  tbody.innerHTML = '';
-  
-  snapshot.forEach(doc=>{
-    const data = doc.data();
-    const dateDisplay = new Date(data.date).toLocaleDateString();
-    
-    // Format date for 'YYYY-MM-DD' for date input compatibility in edit function
-    const dateValue = data.date.substring(0, 10); 
+  // Check if player exists in Firestore
+  const uid = auth.currentUser.uid;
+  const snapshot = await db.collection('powers').doc(uid)
+                           .collection('entries')
+                           .where('name','==',name).get();
+  if (!snapshot.empty) return alert('Player exists');
 
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${data.name}</td>
-      <td>${data.power.toLocaleString()}</td>
-      <td>${dateDisplay}</td>
-      <td>
-        <button class="edit" onclick="editEntry('${doc.id}', '${data.name}', ${data.power}, '${dateValue}')">Edit</button>
-        <button class="delete" onclick="deleteEntry('${doc.id}')">Delete</button>
-      </td>
-    `;
-    tbody.appendChild(tr);
+  // Create 3 weekly entries
+  const batch = db.batch();
+  WEEKS.forEach(wk => {
+    const ref = playerDocRef(name, wk);
+    batch.set(ref, {
+      name,
+      week: wk,
+      power: 0, throne: 0, points: 0,
+      quest: 0, hunt: 0, frosts: 0,
+      lava: 0, challenge:0, donations:0,
+      dv:0, esb:0, esi:0, picks:0,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
   });
+  await batch.commit();
+  renderPlayersList();
+  selectPlayer(name);
 }
 
-// Function to populate the form for editing
-function editEntry(id, name, power, date){
-    // 1. Populate fields
-    playerName.value = name;
-    powerInput.value = power;
-    dateInput.value = date;
-    
-    // 2. Store document ID
-    editDocId.value = id;
-    
-    // 3. Update button state
-    saveBtn.textContent = 'Update Entry';
-    saveBtn.style.backgroundColor = '#10b981'; // Green for update
-    cancelEditBtn.style.display = 'inline-block';
-    
-    // Scroll to the top of the form
-    window.scrollTo(0, 0);
+// === Delete Player ===
+async function deletePlayer(name) {
+  if (!confirm(`Delete all entries for "${name}"?`)) return;
+  const uid = auth.currentUser.uid;
+  const snapshot = await db.collection('powers').doc(uid)
+                           .collection('entries').where('name','==',name).get();
+  const batch = db.batch();
+  snapshot.forEach(doc => batch.delete(doc.ref));
+  await batch.commit();
+  renderPlayersList();
+  if (currentPlayer === name) selectPlayer(null);
 }
 
-// Add / update power handler
-saveBtn.onclick = async ()=>{
-  const name = playerName.value.trim();
-  const power = parseFloat(powerInput.value);
-  let date = dateInput.value;
-  const id = editDocId.value;
-  
-  if(!name || isNaN(power) || power <= 0){ alert("Enter a valid player name and power."); return; }
-  
-  // If no date is set, use today's date in ISO format
-  if(!date) date = new Date().toISOString().substring(0, 10); 
-  
-  // Convert date to ISO string for storage/sorting consistency (YYYY-MM-DDTHH:MM:SS.sssZ)
-  // We use the date input value (YYYY-MM-DD) and append T00:00:00.000Z
-  const isoDate = new Date(date + 'T00:00:00.000Z').toISOString();
-
-  const user = auth.currentUser;
-  
-  const data = { name, power, date: isoDate };
-
-  if(id){
-    // UPDATE existing entry
-    await db.collection('powers').doc(user.uid).collection('entries').doc(id).update(data);
-    alert('Entry updated successfully!');
-  } else {
-    // ADD new entry
-    await db.collection('powers').doc(user.uid).collection('entries').add(data);
-    alert('New entry added successfully!');
+// === Load Players List ===
+async function renderPlayersList() {
+  const uid = auth.currentUser.uid;
+  const snapshot = await db.collection('powers').doc(uid)
+                           .collection('entries').get();
+  const namesSet = new Set(snapshot.docs.map(d => d.data().name));
+  const names = Array.from(namesSet).sort((a,b)=>a.localeCompare(b));
+  const playersList = document.getElementById('playersList');
+  if (!names.length) {
+    playersList.innerHTML = '<li style="color:#64748b;padding:.6rem">No players</li>';
+    return;
   }
-
-  resetForm();
-  loadEntries();
+  playersList.innerHTML = names.map(name => `
+    <li data-player="${name}">
+      <span class="name" data-action="select" data-player="${name}">${name}</span>
+      <span class="actions">
+        <button class="btn delete small-btn" data-action="delete-player" data-player="${name}">Delete</button>
+      </span>
+    </li>
+  `).join('');
 }
 
-// Delete entry
-async function deleteEntry(id){
-  if(!confirm("Are you sure you want to delete this entry?")) return;
-  const user = auth.currentUser;
-  await db.collection('powers').doc(user.uid).collection('entries').doc(id).delete();
-  loadEntries();
+// === Load Week Entry ===
+async function loadCurrentWeekEntry() {
+  if (!currentPlayer) return;
+  const doc = await playerDocRef(currentPlayer,currentWeek).get();
+  const entry = doc.exists ? doc.data() : {};
+  document.getElementById('f_power').value = entry.power||0;
+  document.getElementById('f_throne').value = entry.throne||0;
+  document.getElementById('f_points').value = entry.points||0;
+  document.getElementById('f_quest').value = entry.quest||0;
+  document.getElementById('f_hunt').value = entry.hunt||0;
+  document.getElementById('f_frosts').value = entry.frosts||0;
+  document.getElementById('chk_lava').checked = !!entry.lava;
+  document.getElementById('chk_challenge').checked = !!entry.challenge;
+  document.getElementById('chk_donations').checked = !!entry.donations;
+  document.getElementById('chk_dv').checked = !!entry.dv;
+  document.getElementById('chk_esb').checked = !!entry.esb;
+  const esi = entry.esi||0;
+  document.getElementById('esi_tue').checked = esi>=1;
+  document.getElementById('esi_thu').checked = esi===2;
+  const picks = entry.picks||0;
+  document.getElementById('pick_100').checked = picks>=100;
+  document.getElementById('pick_40').checked = (picks%100)>=40;
+  document.getElementById('pick_20').checked = (picks%40)>=20;
+  document.getElementById('pick_5').checked = (picks%20)>=5;
 }
 
-// Reset form state after save/update or cancel
-function resetForm(){
-    playerName.value='';
-    powerInput.value='';
-    dateInput.valueAsDate = new Date(); // Reset to today
-    editDocId.value = '';
-    saveBtn.textContent = 'Add / Update Power';
-    saveBtn.style.backgroundColor = '#3b82f6'; // Blue default
-    cancelEditBtn.style.display = 'none';
+// === Save Stats ===
+async function saveStatsForWeek() {
+  if (!currentPlayer) return alert('Select player');
+  const picks = [0,100,40,20,5].slice(1).reduce((sum, v, i) => {
+    const c = document.getElementById(['pick_100','pick_40','pick_20','pick_5'][i]);
+    return sum + (c.checked ? Number(c.dataset.value) : 0);
+  }, 0);
+  const esi = (document.getElementById('esi_tue').checked && document.getElementById('esi_thu').checked) ? 2 :
+              (document.getElementById('esi_tue').checked || document.getElementById('esi_thu').checked) ? 1 : 0;
+  const data = {
+    power: Number(document.getElementById('f_power').value)||0,
+    throne: Number(document.getElementById('f_throne').value)||0,
+    points: Number(document.getElementById('f_points').value)||0,
+    quest: Number(document.getElementById('f_quest').value)||0,
+    hunt: Number(document.getElementById('f_hunt').value)||0,
+    frosts: Number(document.getElementById('f_frosts').value)||0,
+    lava: document.getElementById('chk_lava').checked ? 1:0,
+    challenge: document.getElementById('chk_challenge').checked ? 1:0,
+    donations: document.getElementById('chk_donations').checked ? 1:0,
+    dv: document.getElementById('chk_dv').checked ?1:0,
+    esb: document.getElementById('chk_esb').checked ?1:0,
+    esi,
+    picks
+  };
+  await playerDocRef(currentPlayer,currentWeek).set(data,{merge:true});
+  alert('Stats saved!');
 }
-
-// Event listener for cancel button
-cancelEditBtn.onclick = resetForm;
 </script>
-</body>
-</html>
