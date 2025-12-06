@@ -2,75 +2,72 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Player Dashboard</title>
+<title>Power Tracker — Add/Edit Players</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600,700&display=swap" rel="stylesheet">
 <style>
-body{font-family:Inter,sans-serif;margin:0;background:#f8fafc;color:#1e293b;}
-header{background:#1e40af;color:#fff;padding:1rem 1.5rem;display:flex;justify-content:space-between;align-items:center;}
-header h1{margin:0;font-size:1.25rem;}
-button{padding:.5rem 1rem;border-radius:6px;border:none;background:#3b82f6;color:#fff;cursor:pointer;}
-button:hover{opacity:.9;}
-nav{display:flex;justify-content:center;gap:10px;padding:.75rem;background:#e2e8f0;}
-nav a{background:#3b82f6;color:#fff;padding:.6rem 1rem;border-radius:6px;text-decoration:none;font-weight:600;}
-nav a:hover{opacity:.9;}
-main{max-width:900px;margin:1.5rem auto;padding:0 1rem;}
-table{width:100%;border-collapse:collapse;margin-top:1rem;}
-th,td{padding:.6rem;border-bottom:1px solid #ccc;text-align:left;}
-td.percent{text-align:right;}
-tr.selected{background:rgba(59,130,246,0.2);}
-.overlay{
-  position:fixed;top:0;left:0;width:100%;height:100%;
-  background:rgba(0,0,0,0.5);display:flex;justify-content:center;align-items:center;
-  visibility:hidden;opacity:0;transition:opacity .3s;
-}
-.overlay .content{
-  background:#fff;padding:1.5rem;border-radius:12px;max-width:500px;width:90%;
-}
-.overlay.visible{visibility:visible;opacity:1;}
+body { font-family: Inter,sans-serif; margin:0; background:#f8fafc; color:#1e293b; }
+header { background:#1e40af; color:#fff; padding:1rem 1.5rem; display:flex; justify-content:space-between; align-items:center;}
+header h1 { margin:0; font-size:1.25rem; }
+nav { display:flex; justify-content:center; gap:10px; padding:0.75rem; background:#e2e8f0; }
+nav a { color:#fff; text-decoration:none; padding:.6rem 1rem; background:#3b82f6; border-radius:6px; font-weight:600; }
+nav a:hover { opacity:.9; transform:translateY(-1px); }
+main { max-width:900px; margin:1rem auto; padding:0 1rem; display:grid; gap:1rem; grid-template-columns:1fr 1fr; }
+.section { background:#fff; padding:1rem; border-radius:12px; box-shadow:0 3px 10px rgba(0,0,0,0.05); }
+.input { width:100%; padding:.5rem; border:1px solid #ccc; border-radius:8px; font-size:.95rem; margin-bottom:.5rem; }
+.button { padding:.5rem .8rem; border:none; border-radius:8px; cursor:pointer; font-weight:600; }
+.button.save { background:#10b981; color:#fff; }
+.button.delete { background:#ef4444; color:#fff; }
+.button.cancel { background:#6b7280; color:#fff; }
+.players-list { list-style:none; padding:0; margin:0; max-height:250px; overflow:auto; }
+.players-list li { display:flex; justify-content:space-between; padding:.4rem .6rem; border-bottom:1px solid #eee; cursor:pointer; }
+.players-list li.selected { background:#dbeafe; }
+.date-input { width:100%; padding:.5rem; border:1px solid #ccc; border-radius:8px; margin-bottom:.5rem; }
 </style>
 </head>
 <body>
 
 <header>
-  <h1>Player Dashboard</h1>
-  <button id="signOutBtn">Sign Out</button>
+  <h1>Power Tracker</h1>
 </header>
 
 <nav>
-  <a href="power.html">Add / Edit Power</a>
-  <a href="compare.html">Compare Players</a>
+  <a href="index.html">Dashboard</a>
+  <a href="compare.html">Compare</a>
 </nav>
 
 <main>
-  <table id="playerTable">
-    <thead>
-      <tr>
-        <th>Player</th>
-        <th>Previous Power</th>
-        <th>Current Power</th>
-        <th>% Change</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
+  <!-- Player Management -->
+  <section class="section">
+    <h2>Players</h2>
+    <input id="playerNameInput" class="input" placeholder="Enter player name">
+    <div style="display:flex; gap:.5rem; margin-bottom:.5rem;">
+      <button id="addPlayerBtn" class="button save">Add Player</button>
+      <button id="deletePlayerBtn" class="button delete">Delete Selected</button>
+    </div>
+    <ul id="playersList" class="players-list"></ul>
+  </section>
+
+  <!-- Power Logging -->
+  <section class="section">
+    <h2>Add Power Entry</h2>
+    <input type="date" id="entryDate" class="date-input">
+    <input type="number" id="entryPower" class="input" placeholder="Power">
+    <div style="display:flex; gap:.5rem;">
+      <button id="saveEntryBtn" class="button save">Save Entry</button>
+      <button id="deleteEntryBtn" class="button delete">Delete Entry</button>
+    </div>
+    <ul id="entriesList" class="players-list"></ul>
+  </section>
 </main>
 
-<!-- Overlay for comparison -->
-<div class="overlay" id="compareOverlay">
-  <div class="content">
-    <h3>Comparison</h3>
-    <div id="comparisonResult"></div>
-    <button onclick="closeOverlay()">Close</button>
-  </div>
-</div>
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js"></script>
+<script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js"></script>
 
 <script>
-// Firebase config
+// --- Your Firebase Config ---
 const firebaseConfig = {
   apiKey: "AIzaSyAyhGftf_DfotmvL4iLx60NT98BjkbG6DM",
   authDomain: "powercompare-bafd9.firebaseapp.com",
@@ -80,81 +77,163 @@ const firebaseConfig = {
   appId: "1:768897803088:web:ff55aed87037cef6720255",
   measurementId: "G-09ENH5L0VG"
 };
+
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 
-// Redirect if not logged in
-auth.onAuthStateChanged(user=>{
-  if(!user) location.href="login.html";
-  else loadPlayers();
+let uid = null;
+
+// UI elements
+const playerNameInput = document.getElementById('playerNameInput');
+const addPlayerBtn = document.getElementById('addPlayerBtn');
+const deletePlayerBtn = document.getElementById('deletePlayerBtn');
+const playersList = document.getElementById('playersList');
+
+const entryDate = document.getElementById('entryDate');
+const entryPower = document.getElementById('entryPower');
+const saveEntryBtn = document.getElementById('saveEntryBtn');
+const deleteEntryBtn = document.getElementById('deleteEntryBtn');
+const entriesList = document.getElementById('entriesList');
+
+let selectedPlayer = null;
+let selectedEntryId = null;
+
+// --- Wait for login ---
+auth.onAuthStateChanged(user => {
+  if (!user) {
+    window.location.href = "login.html";
+    return;
+  }
+  uid = user.uid;
+  loadPlayers();
 });
 
-// Sign out
-document.getElementById("signOutBtn").onclick = ()=> auth.signOut().then(()=>location.href="login.html");
-
-let selectedPlayers = [];
-
-async function loadPlayers(){
-  const user = auth.currentUser;
-  const snapshot = await db.collection('powers').doc(user.uid).collection('entries')
-                           .orderBy('date','asc').get();
-  const players = {};
-  snapshot.forEach(doc=>{
-    const d = doc.data();
-    if(!players[d.name]) players[d.name]=[];
-    players[d.name].push(d.power);
-  });
-
-  const tbody = document.querySelector("#playerTable tbody");
-  tbody.innerHTML = '';
-
-  Object.entries(players).forEach(([name,powers])=>{
-    const prev = powers.length>1 ? powers[powers.length-2] : 0;
-    const curr = powers[powers.length-1];
-    const change = prev ? ((curr-prev)/prev*100) : 0;
-
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${name}</td>
-      <td>${prev.toLocaleString()}</td>
-      <td>${curr.toLocaleString()}</td>
-      <td class="percent">${change>=0?'+':''}${change.toFixed(2)}%</td>
-    `;
-    tr.onclick = ()=> selectPlayer(tr, name, prev, curr);
-    tbody.appendChild(tr);
-  });
+// ----------------------
+// FIREBASE LOADERS
+// ----------------------
+function loadPlayers() {
+  db.collection("users").doc(uid).collection("players")
+    .orderBy("name")
+    .onSnapshot(snapshot => {
+      playersList.innerHTML = "";
+      snapshot.forEach(doc => {
+        const name = doc.id;
+        const li = document.createElement("li");
+        li.textContent = name;
+        li.dataset.name = name;
+        if (selectedPlayer === name) li.classList.add("selected");
+        playersList.appendChild(li);
+      });
+      renderEntries();
+    });
 }
 
-// Click to select for comparison
-function selectPlayer(tr, name, prev, curr){
-  if(selectedPlayers.find(p=>p.name===name)){
-    selectedPlayers = selectedPlayers.filter(p=>p.name!==name);
-    tr.classList.remove('selected');
-  } else {
-    selectedPlayers.push({name, prev, curr});
-    tr.classList.add('selected');
+function loadEntriesForPlayer(player) {
+  db.collection("users").doc(uid).collection("entries")
+    .where("player", "==", player)
+    .orderBy("date")
+    .onSnapshot(snapshot => {
+      entriesList.innerHTML = "";
+      if (snapshot.empty) {
+        entriesList.innerHTML = '<li style="color:#555">No entries yet</li>';
+        return;
+      }
+      snapshot.forEach(doc => {
+        const e = doc.data();
+        const li = document.createElement("li");
+        li.textContent = `${e.date}: ${e.power}`;
+        li.dataset.id = doc.id;
+        if (selectedEntryId === doc.id) li.classList.add("selected");
+        entriesList.appendChild(li);
+      });
+    });
+}
+
+// ----------------------
+// RENDER
+// ----------------------
+function renderEntries() {
+  if (!selectedPlayer) {
+    entriesList.innerHTML = '<li style="color:#555">Select a player to see entries</li>';
+    return;
   }
-
-  if(selectedPlayers.length>1) showOverlay();
+  loadEntriesForPlayer(selectedPlayer);
 }
 
-// Show overlay
-function showOverlay(){
-  const overlay = document.getElementById("compareOverlay");
-  const container = document.getElementById("comparisonResult");
-  container.innerHTML = selectedPlayers.map(p=>{
-    return `<p><strong>${p.name}</strong>: Current=${p.curr.toLocaleString()}, Previous=${p.prev.toLocaleString()}, Change=${((p.curr-p.prev)/p.prev*100).toFixed(2)}%</p>`;
-  }).join('');
-  overlay.classList.add("visible");
-}
+// ----------------------
+// PLAYER EVENTS
+// ----------------------
+addPlayerBtn.addEventListener("click", () => {
+  const name = playerNameInput.value.trim();
+  if (!name) return alert("Enter name");
 
-// Close overlay
-function closeOverlay(){
-  selectedPlayers = [];
-  document.querySelectorAll("#playerTable tr").forEach(tr=>tr.classList.remove('selected'));
-  document.getElementById("compareOverlay").classList.remove("visible");
-}
+  db.collection("users").doc(uid).collection("players").doc(name)
+    .set({ name })
+    .then(() => playerNameInput.value = "");
+});
+
+deletePlayerBtn.addEventListener("click", () => {
+  if (!selectedPlayer) return alert("Select player");
+
+  if (!confirm(`Delete player "${selectedPlayer}" and all entries?`)) return;
+
+  const playerRef = db.collection("users").doc(uid).collection("players").doc(selectedPlayer);
+
+  // delete player
+  playerRef.delete();
+
+  // delete all entries for player
+  db.collection("users").doc(uid).collection("entries")
+    .where("player", "==", selectedPlayer)
+    .get()
+    .then(s => s.forEach(doc => doc.ref.delete()));
+
+  selectedPlayer = null;
+  selectedEntryId = null;
+});
+
+playersList.addEventListener("click", e => {
+  const li = e.target.closest("li");
+  if (!li) return;
+  selectedPlayer = li.dataset.name;
+  selectedEntryId = null;
+  renderEntries();
+});
+
+// ----------------------
+// ENTRY EVENTS
+// ----------------------
+saveEntryBtn.addEventListener("click", () => {
+  if (!selectedPlayer) return alert("Select a player");
+
+  const date = entryDate.value;
+  const power = Number(entryPower.value);
+  if (!date || !power) return alert("Enter date and power");
+
+  const id = `${selectedPlayer}_${date}`;
+
+  db.collection("users").doc(uid).collection("entries").doc(id)
+    .set({ player: selectedPlayer, date, power })
+    .then(() => {
+      entryDate.value = "";
+      entryPower.value = "";
+    });
+});
+
+deleteEntryBtn.addEventListener("click", () => {
+  if (!selectedEntryId) return alert("Select entry");
+  db.collection("users").doc(uid).collection("entries").doc(selectedEntryId).delete();
+  selectedEntryId = null;
+});
+
+// select entry
+entriesList.addEventListener("click", e => {
+  const li = e.target.closest("li");
+  if (!li) return;
+  selectedEntryId = li.dataset.id;
+  renderEntries();
+});
 </script>
 </body>
 </html>
