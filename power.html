@@ -2,194 +2,168 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Power Tracker — Add/Edit Players</title>
+<title>Add / Edit Player Power</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600,700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+
 <style>
-body { font-family: Inter,sans-serif; margin:0; background:#f8fafc; color:#1e293b; }
-header { background:#1e40af; color:#fff; padding:1rem 1.5rem; display:flex; justify-content:space-between; align-items:center;}
+body { font-family: Inter, sans-serif; margin:0; background:#f8fafc; color:#1e293b; }
+header { background:#1e40af; color:#fff; padding:1rem 1.5rem; display:flex; justify-content:space-between; align-items:center; }
 header h1 { margin:0; font-size:1.25rem; }
 nav { display:flex; justify-content:center; gap:10px; padding:0.75rem; background:#e2e8f0; }
 nav a { color:#fff; text-decoration:none; padding:.6rem 1rem; background:#3b82f6; border-radius:6px; font-weight:600; }
 nav a:hover { opacity:.9; transform:translateY(-1px); }
-main { max-width:900px; margin:1rem auto; padding:0 1rem; display:grid; gap:1rem; grid-template-columns:1fr 1fr; }
-.section { background:#fff; padding:1rem; border-radius:12px; box-shadow:0 3px 10px rgba(0,0,0,0.05); }
-.input { width:100%; padding:.5rem; border:1px solid #ccc; border-radius:8px; font-size:.95rem; margin-bottom:.5rem; }
-.button { padding:.5rem .8rem; border:none; border-radius:8px; cursor:pointer; font-weight:600; }
-.button.save { background:#10b981; color:#fff; }
-.button.delete { background:#ef4444; color:#fff; }
-.button.cancel { background:#6b7280; color:#fff; }
-.players-list { list-style:none; padding:0; margin:0; max-height:250px; overflow:auto; }
-.players-list li { display:flex; justify-content:space-between; padding:.4rem .6rem; border-bottom:1px solid #eee; cursor:pointer; }
-.players-list li.selected { background:#dbeafe; }
-.date-input { width:100%; padding:.5rem; border:1px solid #ccc; border-radius:8px; margin-bottom:.5rem; }
+main { max-width:900px; margin:1.25rem auto; padding:0 1rem; }
+form { display:flex; flex-direction:column; gap:.8rem; margin-bottom:1.5rem; background:#fff; padding:1rem; border-radius:8px; box-shadow:0 2px 5px rgba(0,0,0,0.05); }
+input, select { padding:.5rem; border:1px solid #ccc; border-radius:6px; font-size:1rem; }
+button { padding:.5rem 1rem; border:none; border-radius:6px; background:#3b82f6; color:#fff; font-weight:600; cursor:pointer; }
+button:hover { background:#2563eb; }
+table { width:100%; border-collapse:collapse; }
+th, td { padding:.6rem .8rem; text-align:left; border-bottom:1px solid #ccc; }
+th { background:#e2e8f0; }
+.actions button { margin-right:.5rem; background:#ef4444; }
+.actions button.edit { background:#10b981; }
 </style>
 </head>
+
 <body>
 <header>
-  <h1>Power Tracker</h1>
+  <h1>Manage Player Power</h1>
 </header>
+
 <nav>
   <a href="index.html">Dashboard</a>
   <a href="compare.html">Compare</a>
 </nav>
 
 <main>
-  <!-- Player Management -->
-  <section class="section">
-    <h2>Players</h2>
-    <input id="playerNameInput" class="input" placeholder="Enter player name">
-    <div style="display:flex; gap:.5rem; margin-bottom:.5rem;">
-      <button id="addPlayerBtn" class="button save">Add Player</button>
-      <button id="deletePlayerBtn" class="button delete">Delete Selected</button>
-    </div>
-    <ul id="playersList" class="players-list"></ul>
-  </section>
+  <form id="playerForm">
+    <label>Player Name</label>
+    <select id="playerSelect"></select>
 
-  <!-- Power Logging -->
-  <section class="section">
-    <h2>Add Power Entry</h2>
-    <input type="date" id="entryDate" class="date-input">
-    <input type="number" id="entryPower" class="input" placeholder="Power">
-    <div style="display:flex; gap:.5rem;">
-      <button id="saveEntryBtn" class="button save">Save Entry</button>
-      <button id="deleteEntryBtn" class="button delete">Delete Entry</button>
-    </div>
-    <ul id="entriesList" class="players-list"></ul>
-  </section>
+    <label>Power</label>
+    <input type="number" id="powerInput" placeholder="Enter power" required />
+
+    <button type="submit">Save</button>
+  </form>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Player</th>
+        <th>Power</th>
+        <th>Date</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody id="playerTable"></tbody>
+  </table>
 </main>
 
 <script>
-(function(){
-  const playerNameInput = document.getElementById('playerNameInput');
-  const addPlayerBtn = document.getElementById('addPlayerBtn');
-  const deletePlayerBtn = document.getElementById('deletePlayerBtn');
-  const playersList = document.getElementById('playersList');
+// Firebase config
+const firebaseConfig = {
+  apiKey: "AIzaSyAyhGftf_DfotmvL4iLx60NT98BjkbG6DM",
+  authDomain: "powercompare-bafd9.firebaseapp.com",
+  projectId: "powercompare-bafd9",
+  storageBucket: "powercompare-bafd9.firebasestorage.app",
+  messagingSenderId: "768897803088",
+  appId: "1:768897803088:web:ff55aed87037cef6720255",
+  measurementId: "G-09ENH5L0VG"
+};
 
-  const entryDate = document.getElementById('entryDate');
-  const entryPower = document.getElementById('entryPower');
-  const saveEntryBtn = document.getElementById('saveEntryBtn');
-  const deleteEntryBtn = document.getElementById('deleteEntryBtn');
-  const entriesList = document.getElementById('entriesList');
+// Initialize Firebase
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+const auth = firebase.auth();
 
-  let selectedPlayer = null;
-  let selectedEntryId = null;
+// --- Google Sign-In Redirect ---
+auth.onAuthStateChanged(user => {
+  if (!user) {
+    window.location.href = 'login.html';
+  } else {
+    loadPlayers();
+  }
+});
 
-  // Load from localStorage
-  function loadPlayers() {
-    return JSON.parse(localStorage.getItem('players')||'[]');
-  }
-  function savePlayers(players) {
-    localStorage.setItem('players', JSON.stringify(players));
-  }
-  function loadEntries() {
-    return JSON.parse(localStorage.getItem('entries')||'[]');
-  }
-  function saveEntries(entries) {
-    localStorage.setItem('entries', JSON.stringify(entries));
-  }
+// Form & table references
+const playerForm = document.getElementById('playerForm');
+const playerSelect = document.getElementById('playerSelect');
+const powerInput = document.getElementById('powerInput');
+const playerTable = document.getElementById('playerTable');
 
-  function renderPlayers() {
-    const players = loadPlayers();
-    playersList.innerHTML = '';
-    players.forEach(name => {
-      const li = document.createElement('li');
-      li.textContent = name;
-      li.dataset.name = name;
-      if(selectedPlayer===name) li.classList.add('selected');
-      playersList.appendChild(li);
+let editId = null;
+
+// Load existing players to select
+function loadPlayers() {
+  db.collection('powerData').get().then(snapshot => {
+    const players = [...new Set(snapshot.docs.map(d => d.data().name))].sort();
+    playerSelect.innerHTML = players.map(p => `<option value="${p}">${p}</option>`).join('');
+    renderTable(snapshot.docs);
+  });
+}
+
+// Render table
+function renderTable(docs) {
+  playerTable.innerHTML = docs.map(doc => {
+    const data = doc.data();
+    return `
+      <tr>
+        <td>${data.name}</td>
+        <td>${data.power.toLocaleString()}</td>
+        <td>${data.date}</td>
+        <td class="actions">
+          <button class="edit" data-id="${doc.id}">Edit</button>
+          <button class="delete" data-id="${doc.id}">Delete</button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  // Attach actions
+  document.querySelectorAll('.edit').forEach(btn => {
+    btn.onclick = () => {
+      editId = btn.dataset.id;
+      const doc = docs.find(d => d.id === editId).data();
+      playerSelect.value = doc.name;
+      powerInput.value = doc.power;
+    };
+  });
+
+  document.querySelectorAll('.delete').forEach(btn => {
+    btn.onclick = () => {
+      if (confirm('Delete this entry?')) {
+        db.collection('powerData').doc(btn.dataset.id).delete().then(loadPlayers);
+      }
+    };
+  });
+}
+
+// Handle form submit
+playerForm.onsubmit = e => {
+  e.preventDefault();
+  const name = playerSelect.value;
+  const power = parseInt(powerInput.value, 10);
+  const date = new Date().toISOString().split('T')[0];
+
+  if (!name || !power) return;
+
+  if (editId) {
+    db.collection('powerData').doc(editId).update({name, power, date}).then(() => {
+      editId = null;
+      playerForm.reset();
+      loadPlayers();
     });
-    renderEntries();
-  }
-
-  function renderEntries() {
-    if(!selectedPlayer){
-      entriesList.innerHTML='<li style="color:#555">Select a player to see entries</li>';
-      return;
-    }
-    const entries = loadEntries().filter(e=>e.player===selectedPlayer);
-    if(!entries.length){
-      entriesList.innerHTML='<li style="color:#555">No entries yet</li>';
-      return;
-    }
-    entriesList.innerHTML='';
-    entries.sort((a,b)=>new Date(a.date)-new Date(b.date)).forEach(e=>{
-      const li = document.createElement('li');
-      li.textContent = `${e.date}: ${e.power}`;
-      li.dataset.id = e.id;
-      if(selectedEntryId===e.id) li.classList.add('selected');
-      entriesList.appendChild(li);
+  } else {
+    db.collection('powerData').add({name, power, date}).then(() => {
+      playerForm.reset();
+      loadPlayers();
     });
   }
-
-  // Player Events
-  addPlayerBtn.addEventListener('click', ()=>{
-    const name = playerNameInput.value.trim();
-    if(!name) return alert('Enter name');
-    let players = loadPlayers();
-    if(players.includes(name)) return alert('Player exists');
-    players.push(name);
-    savePlayers(players);
-    playerNameInput.value='';
-    renderPlayers();
-  });
-
-  deletePlayerBtn.addEventListener('click', ()=>{
-    if(!selectedPlayer) return alert('Select player');
-    if(!confirm(`Delete player "${selectedPlayer}" and all entries?`)) return;
-    let players = loadPlayers().filter(p=>p!==selectedPlayer);
-    savePlayers(players);
-    let entries = loadEntries().filter(e=>e.player!==selectedPlayer);
-    saveEntries(entries);
-    selectedPlayer=null;
-    selectedEntryId=null;
-    renderPlayers();
-  });
-
-  playersList.addEventListener('click', e=>{
-    const li = e.target.closest('li');
-    if(!li) return;
-    selectedPlayer = li.dataset.name;
-    selectedEntryId=null;
-    renderPlayers();
-  });
-
-  // Entry Events
-  saveEntryBtn.addEventListener('click', ()=>{
-    if(!selectedPlayer) return alert('Select a player');
-    const date = entryDate.value;
-    const power = Number(entryPower.value);
-    if(!date || !power) return alert('Enter date and power');
-    let entries = loadEntries();
-    const existing = entries.find(e=>e.player===selectedPlayer && e.date===date);
-    if(existing){
-      existing.power = power; // update
-    }else{
-      entries.push({id:'id_'+Date.now(), player:selectedPlayer, date, power});
-    }
-    saveEntries(entries);
-    entryPower.value='';
-    entryDate.value='';
-    renderEntries();
-  });
-
-  deleteEntryBtn.addEventListener('click', ()=>{
-    if(!selectedEntryId) return alert('Select entry');
-    let entries = loadEntries().filter(e=>e.id!==selectedEntryId);
-    selectedEntryId=null;
-    saveEntries(entries);
-    renderEntries();
-  });
-
-  entriesList.addEventListener('click', e=>{
-    const li = e.target.closest('li');
-    if(!li) return;
-    selectedEntryId = li.dataset.id;
-    renderEntries();
-  });
-
-  renderPlayers();
-})();
+};
 </script>
 </body>
 </html>
