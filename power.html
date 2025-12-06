@@ -37,7 +37,6 @@ main { max-width:900px; margin:1rem auto; padding:0 1rem; display:grid; gap:1rem
 </nav>
 
 <main>
-  <!-- Player Management -->
   <section class="section">
     <h2>Players</h2>
     <input id="playerNameInput" class="input" placeholder="Enter player name">
@@ -48,7 +47,6 @@ main { max-width:900px; margin:1rem auto; padding:0 1rem; display:grid; gap:1rem
     <ul id="playersList" class="players-list"></ul>
   </section>
 
-  <!-- Power Logging -->
   <section class="section">
     <h2>Add Power Entry</h2>
     <input type="date" id="entryDate" class="date-input">
@@ -61,10 +59,9 @@ main { max-width:900px; margin:1rem auto; padding:0 1rem; display:grid; gap:1rem
   </section>
 </main>
 
-<!-- Firebase -->
-<script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js"></script>
-<script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
 <script>
 // --- Your Firebase Config ---
@@ -98,6 +95,7 @@ const entriesList = document.getElementById('entriesList');
 
 let selectedPlayer = null;
 let selectedEntryId = null;
+let allEntriesData = {}; 
 
 // --- Wait for login ---
 auth.onAuthStateChanged(user => {
@@ -106,59 +104,85 @@ auth.onAuthStateChanged(user => {
     return;
   }
   uid = user.uid;
-  loadPlayers();
+  loadAllEntries(); 
 });
 
 // ----------------------
 // FIREBASE LOADERS
 // ----------------------
-function loadPlayers() {
-  db.collection("users").doc(uid).collection("players")
-    .orderBy("name")
+
+/** * Loads ALL entries from the correct path, groups them by player, and updates the UI.
+ */
+function loadAllEntries() {
+  // 💡 Using the corrected path: /powers/{uid}/entries
+  db.collection("powers").doc(uid).collection("entries")
+    .orderBy("date", "desc") 
     .onSnapshot(snapshot => {
-      playersList.innerHTML = "";
+      allEntriesData = {};
+      const uniquePlayers = new Set();
+      
       snapshot.forEach(doc => {
-        const name = doc.id;
+        const data = doc.data();
+        data.id = doc.id;
+        uniquePlayers.add(data.player);
+
+        if (!allEntriesData[data.player]) {
+          allEntriesData[data.player] = [];
+        }
+        allEntriesData[data.player].push(data);
+      });
+      
+      renderPlayersList(Array.from(uniquePlayers).sort());
+    });
+}
+
+
+/**
+ * Renders the players list from the unique player names found in allEntriesData.
+ */
+function renderPlayersList(names) {
+    playersList.innerHTML = "";
+    
+    // Auto-select the first player if no one is selected
+    if (!selectedPlayer && names.length > 0) {
+        selectedPlayer = names[0];
+    }
+    
+    names.forEach(name => {
         const li = document.createElement("li");
         li.textContent = name;
         li.dataset.name = name;
         if (selectedPlayer === name) li.classList.add("selected");
         playersList.appendChild(li);
-      });
-      renderEntries();
     });
+    
+    renderEntries(); 
 }
 
-function loadEntriesForPlayer(player) {
-  db.collection("users").doc(uid).collection("entries")
-    .where("player", "==", player)
-    .orderBy("date")
-    .onSnapshot(snapshot => {
-      entriesList.innerHTML = "";
-      if (snapshot.empty) {
-        entriesList.innerHTML = '<li style="color:#555">No entries yet</li>';
-        return;
-      }
-      snapshot.forEach(doc => {
-        const e = doc.data();
-        const li = document.createElement("li");
-        li.textContent = `${e.date}: ${e.power}`;
-        li.dataset.id = doc.id;
-        if (selectedEntryId === doc.id) li.classList.add("selected");
-        entriesList.appendChild(li);
-      });
-    });
-}
-
-// ----------------------
-// RENDER
-// ----------------------
+/**
+ * Renders the entries for the current selectedPlayer from the cached data.
+ */
 function renderEntries() {
+  entriesList.innerHTML = "";
   if (!selectedPlayer) {
     entriesList.innerHTML = '<li style="color:#555">Select a player to see entries</li>';
     return;
   }
-  loadEntriesForPlayer(selectedPlayer);
+  
+  const entries = allEntriesData[selectedPlayer] || [];
+
+  if (entries.length === 0) {
+    entriesList.innerHTML = '<li style="color:#555">No entries yet</li>';
+    return;
+  }
+  
+  entries.forEach(e => {
+    const li = document.createElement("li");
+    li.textContent = `${e.date.substring(0, 10)}: ${Number(e.power).toLocaleString()} Power`;
+    li.dataset.id = e.id;
+    if (selectedEntryId === e.id) li.classList.add("selected");
+    entriesList.appendChild(li);
+  });
 }
 
 // ----------------------
@@ -167,10 +191,17 @@ function renderEntries() {
 addPlayerBtn.addEventListener("click", () => {
   const name = playerNameInput.value.trim();
   if (!name) return alert("Enter name");
-
-  db.collection("users").doc(uid).collection("players").doc(name)
-    .set({ name })
-    .then(() => playerNameInput.value = "");
+  
+  // Add a placeholder entry to define the new player
+  db.collection("powers").doc(uid).collection("entries").add({
+    player: name,
+    date: new Date().toISOString().substring(0, 10),
+    power: 0
+  })
+  .then(() => {
+    playerNameInput.value = "";
+    selectedPlayer = name; 
+  });
 });
 
 deletePlayerBtn.addEventListener("click", () => {
@@ -178,26 +209,31 @@ deletePlayerBtn.addEventListener("click", () => {
 
   if (!confirm(`Delete player "${selectedPlayer}" and all entries?`)) return;
 
-  const playerRef = db.collection("users").doc(uid).collection("players").doc(selectedPlayer);
-
-  // delete player
-  playerRef.delete();
-
-  // delete all entries for player
-  db.collection("users").doc(uid).collection("entries")
+  // Delete ALL entries where the player field matches the selectedPlayer name
+  db.collection("powers").doc(uid).collection("entries")
     .where("player", "==", selectedPlayer)
     .get()
-    .then(s => s.forEach(doc => doc.ref.delete()));
-
-  selectedPlayer = null;
-  selectedEntryId = null;
+    .then(s => {
+      const batch = db.batch();
+      s.forEach(doc => batch.delete(doc.ref));
+      return batch.commit();
+    })
+    .then(() => {
+      selectedPlayer = null;
+      selectedEntryId = null;
+    });
 });
 
 playersList.addEventListener("click", e => {
   const li = e.target.closest("li");
   if (!li) return;
+  
+  playersList.querySelectorAll('li').forEach(item => item.classList.remove('selected'));
+  
   selectedPlayer = li.dataset.name;
   selectedEntryId = null;
+  
+  li.classList.add("selected");
   renderEntries();
 });
 
@@ -209,30 +245,48 @@ saveEntryBtn.addEventListener("click", () => {
 
   const date = entryDate.value;
   const power = Number(entryPower.value);
-  if (!date || !power) return alert("Enter date and power");
+  if (!date || isNaN(power) || power < 0) return alert("Enter a valid date and non-negative power value");
 
-  const id = `${selectedPlayer}_${date}`;
+  const isoDate = date.substring(0, 10);
+  
+  // Use a predictable ID for new/updated entries: player_date
+  const docId = selectedEntryId || `${selectedPlayer}_${isoDate}`; 
 
-  db.collection("users").doc(uid).collection("entries").doc(id)
-    .set({ player: selectedPlayer, date, power })
+  db.collection("powers").doc(uid).collection("entries").doc(docId)
+    .set({ 
+      player: selectedPlayer, 
+      date: isoDate, 
+      power: power 
+    })
     .then(() => {
-      entryDate.value = "";
-      entryPower.value = "";
+      selectedEntryId = null; 
     });
 });
 
 deleteEntryBtn.addEventListener("click", () => {
   if (!selectedEntryId) return alert("Select entry");
-  db.collection("users").doc(uid).collection("entries").doc(selectedEntryId).delete();
-  selectedEntryId = null;
+  
+  db.collection("powers").doc(uid).collection("entries").doc(selectedEntryId).delete()
+    .then(() => {
+        selectedEntryId = null;
+    });
 });
 
 // select entry
 entriesList.addEventListener("click", e => {
   const li = e.target.closest("li");
   if (!li) return;
+  
+  entriesList.querySelectorAll('li').forEach(item => item.classList.remove('selected'));
+  
   selectedEntryId = li.dataset.id;
-  renderEntries();
+  li.classList.add("selected");
+  
+  const data = allEntriesData[selectedPlayer].find(entry => entry.id === selectedEntryId);
+  if (data) {
+      entryDate.value = data.date.substring(0, 10);
+      entryPower.value = data.power;
+  }
 });
 </script>
 </body>
