@@ -8,17 +8,23 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
 <style>
-body{font-family:Inter,sans-serif;margin:0;padding:0;background:#f8fafc;color:#1e293b;}
+body{font-family:Inter,sans-serif;margin:0;background:#f8fafc;color:#1e293b;}
 header{background:#1e40af;color:#fff;padding:1rem 1.5rem;display:flex;justify-content:space-between;align-items:center;}
 header h1{margin:0;font-size:1.25rem;}
-main{max-width:700px;margin:2rem auto;padding:1rem;background:#fff;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,0.05);}
-input, select, button{padding:.6rem;margin:.5rem 0;width:100%;border-radius:6px;border:1px solid #ccc;}
-button{background:#3b82f6;color:#fff;border:none;cursor:pointer;}
+button{padding:.5rem 1rem;border-radius:6px;border:none;background:#3b82f6;color:#fff;cursor:pointer;}
 button:hover{opacity:.9;}
+nav{display:flex;justify-content:center;gap:10px;padding:.75rem;background:#e2e8f0;}
+nav a{background:#3b82f6;color:#fff;padding:.6rem 1rem;border-radius:6px;text-decoration:none;font-weight:600;}
+nav a:hover{opacity:.9;}
+main{max-width:600px;margin:1.5rem auto;padding:0 1rem;}
+.section{background:#fff;padding:1rem;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,0.05);}
+label{display:block;margin:.5rem 0 .2rem;font-weight:500;}
+input, select{width:100%;padding:.5rem;border-radius:6px;border:1px solid #ccc;margin-bottom:.5rem;}
 table{width:100%;border-collapse:collapse;margin-top:1rem;}
 th, td{padding:.5rem;border-bottom:1px solid #ccc;text-align:left;}
-td.actions button{margin-right:.3rem;}
+button.delete{background:#ef4444;}
 </style>
 </head>
 <body>
@@ -28,24 +34,34 @@ td.actions button{margin-right:.3rem;}
   <button id="signOutBtn">Sign Out</button>
 </header>
 
-<main>
-  <h2>New Entry</h2>
-  <input type="text" id="playerName" placeholder="Player Name" />
-  <input type="number" id="playerPower" placeholder="Power" />
-  <input type="date" id="entryDate" />
-  <button id="saveBtn">Save</button>
+<nav>
+  <a href="index.html">Dashboard</a>
+  <a href="compare.html">Compare</a>
+</nav>
 
-  <h2>Existing Entries</h2>
-  <table id="entriesTable">
+<main>
+<div class="section">
+  <label for="playerName">Player Name</label>
+  <input type="text" id="playerName" placeholder="Type new or existing player name">
+
+  <label for="powerInput">Power</label>
+  <input type="number" id="powerInput" placeholder="Enter power value">
+
+  <button id="addBtn">Add / Update Power</button>
+</div>
+
+<div class="section">
+  <h3>Current Entries</h3>
+  <table>
     <thead>
-      <tr><th>Player</th><th>Power</th><th>Date</th><th>Actions</th></tr>
+      <tr><th>Player</th><th>Power</th><th>Date</th><th>Action</th></tr>
     </thead>
-    <tbody></tbody>
+    <tbody id="entryTable"></tbody>
   </table>
-</main>
+</div>
 
 <script>
-// Your Firebase config
+// Firebase config
 const firebaseConfig = {
   apiKey: "AIzaSyAyhGftf_DfotmvL4iLx60NT98BjkbG6DM",
   authDomain: "powercompare-bafd9.firebaseapp.com",
@@ -55,8 +71,6 @@ const firebaseConfig = {
   appId: "1:768897803088:web:ff55aed87037cef6720255",
   measurementId: "G-09ENH5L0VG"
 };
-
-// Initialize Firebase
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
@@ -67,32 +81,13 @@ auth.onAuthStateChanged(user=>{
   else loadEntries();
 });
 
-// Save entry
-document.getElementById("saveBtn").onclick = async () => {
-  const name = document.getElementById("playerName").value.trim();
-  const power = parseInt(document.getElementById("playerPower").value);
-  const date = document.getElementById("entryDate").value;
+// Sign out
+document.getElementById("signOutBtn").onclick = ()=> auth.signOut().then(()=>location.href="login.html");
 
-  if(!name || isNaN(power) || !date) return alert("Fill all fields");
-
+async function loadEntries(){
   const user = auth.currentUser;
-  await db.collection('powers').doc(user.uid)
-          .collection('entries').add({name,power,date});
-
-  document.getElementById("playerName").value = '';
-  document.getElementById("playerPower").value = '';
-  document.getElementById("entryDate").value = '';
-
-  loadEntries();
-};
-
-// Load entries
-async function loadEntries() {
-  const user = auth.currentUser;
-  const snapshot = await db.collection('powers').doc(user.uid)
-                           .collection('entries').orderBy('date','desc').get();
-
-  const tbody = document.querySelector("#entriesTable tbody");
+  const snapshot = await db.collection('powers').doc(user.uid).collection('entries').orderBy('date','desc').get();
+  const tbody = document.getElementById('entryTable');
   tbody.innerHTML = '';
   snapshot.forEach(doc=>{
     const data = doc.data();
@@ -100,26 +95,37 @@ async function loadEntries() {
     tr.innerHTML = `
       <td>${data.name}</td>
       <td>${data.power.toLocaleString()}</td>
-      <td>${data.date}</td>
-      <td class="actions">
-        <button onclick="deleteEntry('${doc.id}')">Delete</button>
-      </td>
+      <td>${new Date(data.date).toLocaleDateString()}</td>
+      <td><button class="delete" onclick="deleteEntry('${doc.id}')">Delete</button></td>
     `;
     tbody.appendChild(tr);
   });
 }
 
-// Delete entry
-async function deleteEntry(id){
-  if(!confirm("Delete this entry?")) return;
+// Add / update power
+document.getElementById('addBtn').onclick = async ()=>{
+  const name = document.getElementById('playerName').value.trim();
+  const power = parseFloat(document.getElementById('powerInput').value);
+  if(!name || isNaN(power)){ alert("Enter player and power"); return; }
+
   const user = auth.currentUser;
-  await db.collection('powers').doc(user.uid)
-          .collection('entries').doc(id).delete();
+  await db.collection('powers').doc(user.uid).collection('entries').add({
+    name,
+    power,
+    date: new Date().toISOString()
+  });
+
+  document.getElementById('playerName').value='';
+  document.getElementById('powerInput').value='';
   loadEntries();
 }
 
-// Sign out
-document.getElementById("signOutBtn").onclick = () => auth.signOut().then(()=>location.href="login.html");
+// Delete entry
+async function deleteEntry(id){
+  const user = auth.currentUser;
+  await db.collection('powers').doc(user.uid).collection('entries').doc(id).delete();
+  loadEntries();
+}
 </script>
 </body>
 </html>
