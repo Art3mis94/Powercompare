@@ -1,8 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Power Manager</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<style>
+body{font-family:Inter,sans-serif;margin:0;padding:0;background:#f8fafc;color:#1e293b;}
+header{background:#1e40af;color:#fff;padding:1rem 1.5rem;display:flex;justify-content:space-between;align-items:center;}
+button{padding:.5rem 1rem;border:none;border-radius:6px;background:#3b82f6;color:#fff;cursor:pointer;}
+button:hover{opacity:.9;}
+main{max-width:800px;margin:1.5rem auto;padding:0 1rem;}
+table{width:100%;border-collapse:collapse;margin-top:1rem;}
+th,td{padding:.6rem;border-bottom:1px solid #ccc;text-align:left;}
+input[type="text"],input[type="number"]{padding:.4rem .6rem;border:1px solid #ccc;border-radius:6px;width:120px;}
+form{display:flex;gap:.5rem;align-items:center;margin-bottom:1rem;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Power Manager</h1>
+  <button id="signOutBtn">Sign Out</button>
+</header>
+
+<main>
+  <form id="addForm">
+    <input type="text" id="playerName" placeholder="Player Name" required>
+    <input type="number" id="playerPower" placeholder="Power" required>
+    <button type="submit">Add Entry</button>
+  </form>
+
+  <table id="powerTable">
+    <thead>
+      <tr>
+        <th>Player</th>
+        <th>Power</th>
+        <th>Date</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</main>
 
 <script>
+// Firebase config
 const firebaseConfig = {
   apiKey: "AIzaSyAyhGftf_DfotmvL4iLx60NT98BjkbG6DM",
   authDomain: "powercompare-bafd9.firebaseapp.com",
@@ -15,140 +60,47 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 
-let currentPlayer = null;
-let currentWeek = 'week 1';
-const WEEKS = ['week 1','week 2','week 3'];
-
 // Redirect if not logged in
-auth.onAuthStateChanged(user => {
-  if (!user) location.href = "login.html";
-  else init();
+auth.onAuthStateChanged(user=>{
+  if(!user) location.href="login.html";
+  else loadEntries();
 });
 
-// === Helper: Firestore paths ===
-function playerDocRef(playerName, week) {
-  const uid = auth.currentUser.uid;
-  return db.collection('powers').doc(uid)
-           .collection('entries').doc(`${playerName}_${week}`);
-}
+// Sign out
+document.getElementById("signOutBtn").onclick = ()=> auth.signOut().then(()=>location.href="login.html");
 
-// === Add Player ===
-async function addPlayer(name) {
-  name = name.trim();
-  if (!name) return alert('Enter a name');
+// Add entry
+document.getElementById("addForm").addEventListener("submit", async (e)=>{
+  e.preventDefault();
+  const name = document.getElementById("playerName").value.trim();
+  const power = Number(document.getElementById("playerPower").value);
+  if(!name || !power) return;
 
-  // Check if player exists in Firestore
-  const uid = auth.currentUser.uid;
-  const snapshot = await db.collection('powers').doc(uid)
-                           .collection('entries')
-                           .where('name','==',name).get();
-  if (!snapshot.empty) return alert('Player exists');
+  const entry = { name, power, date: new Date() };
+  await db.collection('powers').add(entry);
 
-  // Create 3 weekly entries
-  const batch = db.batch();
-  WEEKS.forEach(wk => {
-    const ref = playerDocRef(name, wk);
-    batch.set(ref, {
-      name,
-      week: wk,
-      power: 0, throne: 0, points: 0,
-      quest: 0, hunt: 0, frosts: 0,
-      lava: 0, challenge:0, donations:0,
-      dv:0, esb:0, esi:0, picks:0,
-      createdAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
+  document.getElementById("playerName").value = '';
+  document.getElementById("playerPower").value = '';
+  loadEntries();
+});
+
+// Load all entries
+async function loadEntries(){
+  const snapshot = await db.collection('powers').orderBy('date','desc').get();
+  const tbody = document.querySelector("#powerTable tbody");
+  tbody.innerHTML = '';
+  snapshot.forEach(doc=>{
+    const d = doc.data();
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${d.name}</td>
+      <td>${d.power}</td>
+      <td>${new Date(d.date.seconds*1000).toLocaleString()}</td>
+    `;
+    tbody.appendChild(tr);
   });
-  await batch.commit();
-  renderPlayersList();
-  selectPlayer(name);
-}
-
-// === Delete Player ===
-async function deletePlayer(name) {
-  if (!confirm(`Delete all entries for "${name}"?`)) return;
-  const uid = auth.currentUser.uid;
-  const snapshot = await db.collection('powers').doc(uid)
-                           .collection('entries').where('name','==',name).get();
-  const batch = db.batch();
-  snapshot.forEach(doc => batch.delete(doc.ref));
-  await batch.commit();
-  renderPlayersList();
-  if (currentPlayer === name) selectPlayer(null);
-}
-
-// === Load Players List ===
-async function renderPlayersList() {
-  const uid = auth.currentUser.uid;
-  const snapshot = await db.collection('powers').doc(uid)
-                           .collection('entries').get();
-  const namesSet = new Set(snapshot.docs.map(d => d.data().name));
-  const names = Array.from(namesSet).sort((a,b)=>a.localeCompare(b));
-  const playersList = document.getElementById('playersList');
-  if (!names.length) {
-    playersList.innerHTML = '<li style="color:#64748b;padding:.6rem">No players</li>';
-    return;
-  }
-  playersList.innerHTML = names.map(name => `
-    <li data-player="${name}">
-      <span class="name" data-action="select" data-player="${name}">${name}</span>
-      <span class="actions">
-        <button class="btn delete small-btn" data-action="delete-player" data-player="${name}">Delete</button>
-      </span>
-    </li>
-  `).join('');
-}
-
-// === Load Week Entry ===
-async function loadCurrentWeekEntry() {
-  if (!currentPlayer) return;
-  const doc = await playerDocRef(currentPlayer,currentWeek).get();
-  const entry = doc.exists ? doc.data() : {};
-  document.getElementById('f_power').value = entry.power||0;
-  document.getElementById('f_throne').value = entry.throne||0;
-  document.getElementById('f_points').value = entry.points||0;
-  document.getElementById('f_quest').value = entry.quest||0;
-  document.getElementById('f_hunt').value = entry.hunt||0;
-  document.getElementById('f_frosts').value = entry.frosts||0;
-  document.getElementById('chk_lava').checked = !!entry.lava;
-  document.getElementById('chk_challenge').checked = !!entry.challenge;
-  document.getElementById('chk_donations').checked = !!entry.donations;
-  document.getElementById('chk_dv').checked = !!entry.dv;
-  document.getElementById('chk_esb').checked = !!entry.esb;
-  const esi = entry.esi||0;
-  document.getElementById('esi_tue').checked = esi>=1;
-  document.getElementById('esi_thu').checked = esi===2;
-  const picks = entry.picks||0;
-  document.getElementById('pick_100').checked = picks>=100;
-  document.getElementById('pick_40').checked = (picks%100)>=40;
-  document.getElementById('pick_20').checked = (picks%40)>=20;
-  document.getElementById('pick_5').checked = (picks%20)>=5;
-}
-
-// === Save Stats ===
-async function saveStatsForWeek() {
-  if (!currentPlayer) return alert('Select player');
-  const picks = [0,100,40,20,5].slice(1).reduce((sum, v, i) => {
-    const c = document.getElementById(['pick_100','pick_40','pick_20','pick_5'][i]);
-    return sum + (c.checked ? Number(c.dataset.value) : 0);
-  }, 0);
-  const esi = (document.getElementById('esi_tue').checked && document.getElementById('esi_thu').checked) ? 2 :
-              (document.getElementById('esi_tue').checked || document.getElementById('esi_thu').checked) ? 1 : 0;
-  const data = {
-    power: Number(document.getElementById('f_power').value)||0,
-    throne: Number(document.getElementById('f_throne').value)||0,
-    points: Number(document.getElementById('f_points').value)||0,
-    quest: Number(document.getElementById('f_quest').value)||0,
-    hunt: Number(document.getElementById('f_hunt').value)||0,
-    frosts: Number(document.getElementById('f_frosts').value)||0,
-    lava: document.getElementById('chk_lava').checked ? 1:0,
-    challenge: document.getElementById('chk_challenge').checked ? 1:0,
-    donations: document.getElementById('chk_donations').checked ? 1:0,
-    dv: document.getElementById('chk_dv').checked ?1:0,
-    esb: document.getElementById('chk_esb').checked ?1:0,
-    esi,
-    picks
-  };
-  await playerDocRef(currentPlayer,currentWeek).set(data,{merge:true});
-  alert('Stats saved!');
 }
 </script>
+
+</body>
+</html>
