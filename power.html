@@ -69,7 +69,7 @@ button.delete{background:#ef4444;color:#fff;}
 </table>
 
 <script>
-  // Your Firebase config
+  // Firebase config
   const firebaseConfig = {
     apiKey: "AIzaSyAyhGftf_DfotmvL4iLx60NT98BjkbG6DM",
     authDomain: "powercompare-bafd9.firebaseapp.com",
@@ -93,7 +93,7 @@ button.delete{background:#ef4444;color:#fff;}
 
   // Load players from Firestore
   function loadPlayers() {
-    db.collection('powerData').orderBy('date', 'desc').get().then(snapshot => {
+    db.collection('powerData').orderBy('date','desc').get().then(snapshot => {
       playerTable.innerHTML = '';
       snapshot.forEach(doc => {
         const data = doc.data();
@@ -110,7 +110,7 @@ button.delete{background:#ef4444;color:#fff;}
         playerTable.appendChild(row);
       });
 
-      // Add event listeners for edit/delete
+      // Edit buttons
       document.querySelectorAll('button.edit').forEach(btn => {
         btn.onclick = () => {
           const id = btn.dataset.id;
@@ -122,9 +122,10 @@ button.delete{background:#ef4444;color:#fff;}
         };
       });
 
+      // Delete buttons
       document.querySelectorAll('button.delete').forEach(btn => {
         btn.onclick = () => {
-          if(confirm("Are you sure you want to delete this entry?")){
+          if(confirm("Delete this entry?")){
             db.collection('powerData').doc(btn.dataset.id).delete().then(loadPlayers);
           }
         };
@@ -132,23 +133,22 @@ button.delete{background:#ef4444;color:#fff;}
     });
   }
 
-  // Handle form submit
+  // Form submit
   playerForm.onsubmit = e => {
     e.preventDefault();
     const name = playerNameInput.value.trim();
-    const power = parseInt(powerInput.value, 10);
+    const power = parseInt(powerInput.value,10);
     const date = new Date().toISOString().split('T')[0];
-
-    if (!name || !power) return;
+    if(!name || !power) return;
 
     if(editId){
-      db.collection('powerData').doc(editId).update({name,power,date}).then(() => {
-        editId = null;
+      db.collection('powerData').doc(editId).update({name,power,date}).then(()=>{
+        editId=null;
         playerForm.reset();
         loadPlayers();
       });
     } else {
-      db.collection('powerData').add({name,power,date}).then(() => {
+      db.collection('powerData').add({name,power,date}).then(()=>{
         playerForm.reset();
         loadPlayers();
       });
