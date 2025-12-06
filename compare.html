@@ -2,9 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Compare Players — Power</title>
+<title>Compare Players — Power Trends</title>
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
@@ -19,18 +20,19 @@ nav a{background:#3b82f6;color:#fff;padding:.6rem 1rem;border-radius:6px;text-de
 main{max-width:1200px;margin:1.5rem auto;padding:0 1rem;}
 .section{background:#fff;padding:1rem;border-radius:12px;box-shadow:0 6px 20px rgba(2,6,23,0.04);}
 .section h2{font-size:1.25rem;margin-bottom:1rem;}
-.controls{display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1rem;}
+.controls{display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1rem; align-items: flex-end;}
 .filter-group{display:flex;flex-direction:column;gap:.3rem;}
 .filter-group label{font-weight:500;color:#475569;}
 .filter-group select{padding:.5rem;border-radius:6px;border:1px solid #e2e8f0;background:#fff;color:#1e293b;}
 .filter-group button{padding:.5rem 1rem;border-radius:6px;border:0;background:#3b82f6;color:#fff;font-weight:600;cursor:pointer;}
-.filter-group button:hover{background:#2563eb;}
+.filter-group button#compareBtn{background:#10b981;} /* Green for Summary Table */
+.filter-group button#chartBtn{background:#f59e0b;} /* Orange for Chart */
+.filter-group button:hover{opacity: 0.9;}
 .filter-group button#resetBtn{background:#6b7280;}
-.filter-group button#resetBtn:hover{background:#4b5563;}
 /* Chart container styling */
 #chartContainer{
     position: relative;
-    height: 400px; /* Define a height for the chart */
+    height: 450px; /* Defined height for Chart.js */
     width: 100%;
     margin-top: 1rem;
     padding: 1rem;
@@ -82,12 +84,11 @@ main{max-width:1200px;margin:1.5rem auto;padding:0 1rem;}
         <label for="comparisonMethod">Chart Method</label>
         <select id="comparisonMethod">
             <option value="rawPower">Raw Power (Y-Axis: Total Power)</option>
-            <option value="percentChange">Percent Change (Y-Axis: % Change)</option>
+            <option value="percentChange">Percent Change (Y-Axis: % Growth)</option>
         </select>
     </div>
 
-    <div class="filter-group">
-      <label>&nbsp;</label>
+    <div class="filter-group" style="flex-direction: row; align-items: center;">
       <button id="chartBtn">Generate Chart</button>
       <button id="compareBtn">Summary Table</button>
       <button id="resetBtn">Reset</button>
@@ -126,18 +127,29 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 
-// Global variable to store all player entries once loaded
+// Global variables for data and chart instance
 let allPlayerEntries = {}; 
+let powerTrendChart;
+const playerColors = {};
+const chartStatus = document.getElementById('chartStatus');
+const powerChartCanvas = document.getElementById('powerChart');
 
 // Utility function to format numbers with commas
-const formatNumber = (num) => {
-    // Check if the number is an integer (for power values)
-    if (Number.isInteger(num)) {
-        return num.toLocaleString();
+const formatNumber = (num, isPercent = false) => {
+    if (isNaN(num)) return num;
+    if (isPercent) {
+        return num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
-    // For percentages, keep the precision
-    return num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    // For large power values
+    return Math.round(num).toLocaleString();
 };
+
+function getRandomColor() {
+    const r = Math.floor(Math.random() * 200);
+    const g = Math.floor(Math.random() * 200);
+    const b = Math.floor(Math.random() * 200);
+    return `rgb(${r},${g},${b})`;
+}
 
 // Redirect if not logged in
 auth.onAuthStateChanged(user=>{
@@ -151,11 +163,12 @@ auth.onAuthStateChanged(user=>{
 // Sign out
 document.getElementById("signOutBtn").onclick = ()=> auth.signOut().then(()=>location.href="login.html");
 
+
 /**
- * Loads all entries for the current user and populates the player selection list.
+ * Loads all entries from Firebase, groups them by player, and sorts them by date.
  */
 async function loadAllPlayerEntries(){
-    document.getElementById('chartStatus').textContent = 'Loading player data...';
+    chartStatus.textContent = 'Loading player data...';
     const user = auth.currentUser;
     if (!user) return; 
 
@@ -165,7 +178,7 @@ async function loadAllPlayerEntries(){
     const players = {};
     snapshot.forEach(doc => {
         const data = doc.data();
-        const date = data.date ? data.date : new Date().toISOString(); 
+        const date = data.date ? data.date.substring(0, 10) : new Date().toISOString().substring(0, 10); // Use YYYY-MM-DD
         
         if (!players[data.name]) players[data.name] = [];
         players[data.name].push({
@@ -176,7 +189,7 @@ async function loadAllPlayerEntries(){
 
     allPlayerEntries = players;
     populatePlayers();
-    document.getElementById('chartStatus').textContent = 'Select players and click "Generate Chart" to view the trend.';
+    chartStatus.textContent = 'Select players and click "Generate Chart" to view the trend.';
 }
 
 /**
@@ -221,7 +234,6 @@ function showOverlay(){
         </tr>
     `;
     
-    let topPower = 0;
     const comparisonRows = [];
 
     selectedNames.forEach(name => {
@@ -234,10 +246,7 @@ function showOverlay(){
         const currentPower = latestEntry.power;
         const previousPower = previousEntry.power;
 
-        // Calculate percent change, handling division by zero for new players
         const change = previousPower ? ((currentPower - previousPower) / previousPower * 100) : 0;
-        
-        if(currentPower > topPower) topPower = currentPower;
         
         comparisonRows.push({ name, currentPower, previousPower, change });
     });
@@ -251,7 +260,7 @@ function showOverlay(){
                 <td>${r.name}</td>
                 <td class="power-val">${formatNumber(r.currentPower)}</td>
                 <td>${formatNumber(r.previousPower)}</td>
-                <td style="${changeColor}">${r.change >= 0 ? '+' : ''}${formatNumber(r.change)}%</td>
+                <td style="${changeColor}">${r.change >= 0 ? '+' : ''}${formatNumber(r.change, true)}%</td>
             </tr>
         `;
     });
@@ -260,7 +269,7 @@ function showOverlay(){
 }
 
 /**
- * Prepares data and calls a charting function (placeholder).
+ * Prepares data and generates the Chart.js trend chart.
  */
 function generateChart(){
     const selectedNames = [...document.getElementById('playerSelect').options]
@@ -269,79 +278,161 @@ function generateChart(){
     const method = document.getElementById('comparisonMethod').value;
 
     if(selectedNames.length === 0){ 
-        alert('Select at least one player to generate a chart.'); 
+        chartStatus.textContent = 'Please select at least one player to generate a chart.';
+        powerChartCanvas.style.display = 'none';
         return; 
     }
     
+    if (powerTrendChart) powerTrendChart.destroy();
+    
     // --- Data Preparation ---
-    const chartData = {};
     let allDates = new Set();
     
     selectedNames.forEach(name => {
         const entries = allPlayerEntries[name];
-        if(!entries || entries.length === 0) return;
-        
-        // Ensure dates are used as keys for merging datasets
-        const playerSeries = entries.reduce((acc, entry) => {
-            const dateKey = entry.date.substring(0, 10); // Use YYYY-MM-DD for consistency
-            allDates.add(dateKey);
-            acc[dateKey] = entry.power;
-            return acc;
-        }, {});
-        chartData[name] = playerSeries;
+        if(entries && entries.length > 0) {
+            entries.forEach(entry => allDates.add(entry.date));
+        }
     });
 
-    if (Object.keys(chartData).length === 0) {
-        alert('No data available for the selected players.');
-        return;
-    }
-    
     const sortedDates = Array.from(allDates).sort();
 
-    // The function below is a placeholder. You would replace this with actual 
-    // chart rendering code using a library like Chart.js, D3.js, etc.
-    renderChartPlaceholder(sortedDates, chartData, method);
+    const datasets = selectedNames.map(player => {
+        const entries = allPlayerEntries[player] || [];
+        if (!playerColors[player]) playerColors[player] = getRandomColor();
+
+        const dataPoints = sortedDates.map(dateKey => {
+            const entry = entries.find(e => e.date === dateKey);
+            return entry ? entry.power : null; // Use null for gaps in the data
+        });
+
+        const finalData = (method === 'rawPower') ? dataPoints : calculatePercentChangeSeries(dataPoints);
+
+        return {
+            label: player,
+            data: finalData,
+            borderColor: playerColors[player],
+            backgroundColor: playerColors[player].replace('rgb', 'rgba').replace(')', ', 0.5)'),
+            spanGaps: true, // Connect lines across missing data points (nulls)
+            tension: 0.2,
+            borderWidth: 2,
+            pointRadius: 4
+        };
+    }).filter(d => d.data.some(v => v !== null)); // Filter out players with no data
+
+    // --- Chart Configuration ---
+    let chartTitle, yAxisLabel, tooltipCallback;
+
+    if (method === 'rawPower') {
+        chartTitle = 'Raw Power Trend';
+        yAxisLabel = 'Total Power';
+        tooltipCallback = {
+            label: (context) => {
+                let label = context.dataset.label || '';
+                if (label) label += ': ';
+                if (context.parsed.y !== null) label += formatNumber(context.parsed.y);
+                return label;
+            }
+        };
+    } else { // percentChange
+        chartTitle = 'Percent Change Trend';
+        yAxisLabel = '% Change';
+        tooltipCallback = {
+            label: (context) => {
+                let label = context.dataset.label || '';
+                if (label) label += ': ';
+                if (context.parsed.y !== null) label += `${context.parsed.y > 0 ? '+' : ''}${formatNumber(context.parsed.y, true)}%`;
+                return label;
+            }
+        };
+    }
+
+    const ctx = powerChartCanvas.getContext('2d');
+    powerTrendChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: sortedDates,
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                title: { display: true, text: chartTitle, font: { size: 16 } },
+                tooltip: { callbacks: tooltipCallback }
+            },
+            scales: {
+                x: { 
+                    title: { display: true, text: 'Date' },
+                    // Assuming dates are evenly spaced, we can use 'category'
+                    type: 'category' 
+                },
+                y: {
+                    title: { display: true, text: yAxisLabel },
+                    beginAtZero: method === 'percentChange',
+                    ticks: {
+                        callback: function(value, index, ticks) {
+                            if (method === 'rawPower') return formatNumber(value);
+                            return value + '%'; // For Percent Change
+                        }
+                    }
+                }
+            }
+        }
+    });
+    
+    chartStatus.style.display = 'none';
+    powerChartCanvas.style.display = 'block';
 }
 
 /**
- * PLACEHOLDER FUNCTION: This function simulates chart generation.
- * You MUST replace this with a real charting library implementation.
+ * Helper function to convert a raw power series into a percent change series.
+ * Calculation is (Current - Previous) / Previous * 100.
  */
-function renderChartPlaceholder(dates, data, method){
-    const canvas = document.getElementById('powerChart');
-    const status = document.getElementById('chartStatus');
-    
-    // In a real implementation, you'd initialize a Chart.js object here.
-    // For example:
-    // const ctx = canvas.getContext('2d');
-    // new Chart(ctx, { ... data and config based on 'method' ... });
+function calculatePercentChangeSeries(rawPowerData) {
+    const percentChange = [null]; // First entry has no previous to compare to
+    for (let i = 1; i < rawPowerData.length; i++) {
+        const current = rawPowerData[i];
+        const previous = rawPowerData[i - 1];
+        
+        if (current === null) {
+            percentChange.push(null);
+        } else if (previous === null) {
+            // Find the most recent non-null power value
+            let lastValidIndex = i - 1;
+            while(lastValidIndex >= 0 && rawPowerData[lastValidIndex] === null) {
+                lastValidIndex--;
+            }
+            const actualPrevious = rawPowerData[lastValidIndex];
 
-    // Placeholder text update:
-    status.style.display = 'block';
-    canvas.style.display = 'none';
-    
-    let chartTitle = method === 'rawPower' ? 'Raw Power Over Time' : 'Percent Change Over Time';
-    let yAxisLabel = method === 'rawPower' ? 'Power Value' : 'Percent Change (%)';
-    
-    status.innerHTML = `
-        <h3>${chartTitle}</h3>
-        <p>Chart generation logic goes here. The method selected is: <strong>${method}</strong>.</p>
-        <p>The **X-Axis** would be **Date**.</p>
-        <p>The **Y-Axis** would represent the **${yAxisLabel}**.</p>
-        <p>The data points ready to be charted are for dates: ${dates.join(', ')}</p>
-        <p>To implement this, you'll need to include a charting library (e.g., Chart.js) and write the code to draw lines based on the prepared <code>dates</code> and <code>data</code> variables, adjusting the Y-axis scale based on the <code>method</code>.</p>
-    `;
-    
-    // Example of showing the canvas placeholder for styling purposes:
-    // canvas.style.display = 'block'; 
+            if (actualPrevious !== null && actualPrevious !== 0) {
+                 // Calculate change from the last known valid point
+                 const change = ((current - actualPrevious) / actualPrevious) * 100;
+                 percentChange.push(parseFloat(change.toFixed(2)));
+            } else {
+                 percentChange.push(null); // No valid previous point found
+            }
+        } else if (previous === 0) {
+            // Avoid division by zero, treat change as infinity or a very high number
+            percentChange.push(current > 0 ? 9999 : 0); 
+        } else {
+            const change = ((current - previous) / previous) * 100;
+            percentChange.push(parseFloat(change.toFixed(2)));
+        }
+    }
+    return percentChange;
 }
 
 
 // Event listeners
-document.getElementById('compareBtn').onclick = showOverlay; // Summary Table button
-document.getElementById('chartBtn').onclick = generateChart; // Generate Chart button
+document.getElementById('compareBtn').onclick = showOverlay; 
+document.getElementById('chartBtn').onclick = generateChart; 
 document.getElementById('resetBtn').onclick = ()=>{
     [...document.getElementById('playerSelect').options].forEach(o=>o.selected=false);
+    if(powerTrendChart) powerTrendChart.destroy();
+    powerChartCanvas.style.display = 'none';
+    chartStatus.style.display = 'block';
+    chartStatus.textContent = 'Select players and click "Generate Chart" to view the trend.';
 };
 document.getElementById('closeOverlay').onclick = ()=>document.getElementById('overlay').style.display='none';
 </script>
