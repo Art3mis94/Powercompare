@@ -2,34 +2,37 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Power Tracker — Add/Edit Players</title>
+<title>Add / Edit Power</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600,700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
 <style>
-/* ... (Existing styles remain the same) ... */
-body { font-family: Inter,sans-serif; margin:0; background:#f8fafc; color:#1e293b; }
-header { background:#1e40af; color:#fff; padding:1rem 1.5rem; display:flex; justify-content:space-between; align-items:center;}
-header h1 { margin:0; font-size:1.25rem; }
-nav { display:flex; justify-content:center; gap:10px; padding:0.75rem; background:#e2e8f0; }
-nav a { color:#fff; text-decoration:none; padding:.6rem 1rem; background:#3b82f6; border-radius:6px; font-weight:600; }
-nav a:hover { opacity:.9; transform:translateY(-1px); }
-main { max-width:900px; margin:1rem auto; padding:0 1rem; display:grid; gap:1rem; grid-template-columns:1fr 1fr; }
-.section { background:#fff; padding:1rem; border-radius:12px; box-shadow:0 3px 10px rgba(0,0,0,0.05); }
-.input { width:100%; padding:.5rem; border:1px solid #ccc; border-radius:8px; font-size:.95rem; margin-bottom:.5rem; }
-.button { padding:.5rem .8rem; border:none; border-radius:8px; cursor:pointer; font-weight:600; }
-.button.save { background:#10b981; color:#fff; }
-.button.delete { background:#ef4444; color:#fff; }
-.button.cancel { background:#6b7280; color:#fff; }
-.players-list { list-style:none; padding:0; margin:0; max-height:250px; overflow:auto; }
-.players-list li { display:flex; justify-content:space-between; padding:.4rem .6rem; border-bottom:1px solid #eee; cursor:pointer; }
-.players-list li.selected { background:#dbeafe; }
-.date-input { width:100%; padding:.5rem; border:1px solid #ccc; border-radius:8px; margin-bottom:.5rem; }
+body{font-family:Inter,sans-serif;margin:0;background:#f8fafc;color:#1e293b;}
+header{background:#1e40af;color:#fff;padding:1rem 1.5rem;display:flex;justify-content:space-between;align-items:center;}
+header h1{margin:0;font-size:1.25rem;}
+button{padding:.5rem 1rem;border-radius:6px;border:none;background:#3b82f6;color:#fff;cursor:pointer;}
+button:hover{opacity:.9;}
+nav{display:flex;justify-content:center;gap:10px;padding:.75rem;background:#e2e8f0;}
+nav a{background:#3b82f6;color:#fff;padding:.6rem 1rem;border-radius:6px;text-decoration:none;font-weight:600;}
+nav a:hover{opacity:.9;}
+main{max-width:600px;margin:1.5rem auto;padding:0 1rem;}
+.section{background:#fff;padding:1rem;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,0.05);}
+label{display:block;margin:.5rem 0 .2rem;font-weight:500;}
+input, select{width:100%;padding:.5rem;border-radius:6px;border:1px solid #ccc;margin-bottom:.5rem;}
+table{width:100%;border-collapse:collapse;margin-top:1rem;}
+th, td{padding:.5rem;border-bottom:1px solid #ccc;text-align:left;}
+button.delete{background:#ef4444; margin-right: 5px;}
+button.edit{background:#f59e0b;} /* New Edit button style */
 </style>
 </head>
 <body>
 
 <header>
-  <h1>Power Tracker</h1>
+  <h1>Add / Edit Power</h1>
+  <button id="signOutBtn">Sign Out</button>
 </header>
 
 <nav>
@@ -38,34 +41,35 @@ main { max-width:900px; margin:1rem auto; padding:0 1rem; display:grid; gap:1rem
 </nav>
 
 <main>
-  <section class="section">
-    <h2>Players</h2>
-    <input id="playerNameInput" class="input" placeholder="Enter player name">
-    <div style="display:flex; gap:.5rem; margin-bottom:.5rem;">
-      <button id="addPlayerBtn" class="button save">Add Player</button>
-      <button id="deletePlayerBtn" class="button delete">Delete Selected</button>
-    </div>
-    <ul id="playersList" class="players-list"></ul>
-  </section>
+<div class="section">
+  <label for="playerName">Player Name</label>
+  <input type="text" id="playerName" placeholder="Type new or existing player name">
 
-  <section class="section">
-    <h2>Add Power Entry</h2>
-    <input type="date" id="entryDate" class="date-input">
-    <input type="number" id="entryPower" class="input" placeholder="Power">
-    <div style="display:flex; gap:.5rem;">
-      <button id="saveEntryBtn" class="button save">Save Entry</button>
-      <button id="deleteEntryBtn" class="button delete">Delete Entry</button>
-    </div>
-    <ul id="entriesList" class="players-list"></ul>
-  </section>
-</main>
+  <label for="powerInput">Power</label>
+  <input type="number" id="powerInput" placeholder="Enter power value">
 
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <label for="dateInput">Date</label>
+  <input type="date" id="dateInput">
+  <small>If left empty, today's date will be used.</small>
+
+  <input type="hidden" id="editDocId">
+
+  <button id="saveBtn">Add / Update Power</button>
+  <button id="cancelEditBtn" style="display:none; background:#6b7280;">Cancel Edit</button>
+</div>
+
+<div class="section">
+  <h3>Current Entries (Latest First)</h3>
+  <table>
+    <thead>
+      <tr><th>Player</th><th>Power</th><th>Date</th><th>Action</th></tr>
+    </thead>
+    <tbody id="entryTable"></tbody>
+  </table>
+</div>
 
 <script>
-// --- Your Firebase Config ---
+// Firebase config (Use your actual configuration)
 const firebaseConfig = {
   apiKey: "AIzaSyAyhGftf_DfotmvL4iLx60NT98BjkbG6DM",
   authDomain: "powercompare-bafd9.firebaseapp.com",
@@ -75,283 +79,134 @@ const firebaseConfig = {
   appId: "1:768897803088:web:ff55aed87037cef6720255",
   measurementId: "G-09ENH5L0VG"
 };
-
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 
-let uid = null;
+// DOM elements
+const playerName = document.getElementById('playerName');
+const powerInput = document.getElementById('powerInput');
+const dateInput = document.getElementById('dateInput');
+const editDocId = document.getElementById('editDocId');
+const saveBtn = document.getElementById('saveBtn');
+const cancelEditBtn = document.getElementById('cancelEditBtn');
 
-// UI elements
-const playerNameInput = document.getElementById('playerNameInput');
-const addPlayerBtn = document.getElementById('addPlayerBtn');
-const deletePlayerBtn = document.getElementById('deletePlayerBtn');
-const playersList = document.getElementById('playersList');
-
-const entryDate = document.getElementById('entryDate');
-const entryPower = document.getElementById('entryPower');
-const saveEntryBtn = document.getElementById('saveEntryBtn');
-const deleteEntryBtn = document.getElementById('deleteEntryBtn');
-const entriesList = document.getElementById('entriesList');
-
-let selectedPlayer = null;
-let selectedEntryId = null;
-let allEntriesData = {}; 
-
-
-// 🚀 ------------------------------------------ 🚀
-// 🚀 TEMPORARY MIGRATION FUNCTION (REMOVE AFTER USE) 🚀
-// ----------------------------------------------------
-async function migrateOldData(uid) {
-    if (!uid) return;
-    
-    // Old Path: /users/{uid}/entries
-    const oldEntriesRef = db.collection("users").doc(uid).collection("entries");
-    // New Path: /powers/{uid}/entries
-    const newEntriesRef = db.collection("powers").doc(uid).collection("entries");
-    
-    console.log(`Starting migration for user: ${uid}`);
-    
-    try {
-        const snapshot = await oldEntriesRef.get();
-        const totalEntries = snapshot.docs.length;
-
-        if (totalEntries === 0) {
-            console.log("✅ No old entries found in /users/...");
-            return;
-        }
-
-        console.warn(`Found ${totalEntries} old entries. Migrating now...`);
-
-        let batch = db.batch();
-        let batchCount = 0;
-
-        for (const doc of snapshot.docs) {
-            const oldData = doc.data();
-            const oldDocId = doc.id;
-
-            // Use 'player' and 'date' to create the new ID for consistency
-            const newDocId = `${oldData.player}_${oldData.date.substring(0, 10)}`;
-
-            const newData = {
-                player: oldData.player,
-                date: oldData.date.substring(0, 10), 
-                power: oldData.power || 0,
-            };
-
-            // 1. Set the new document (COPY)
-            batch.set(newEntriesRef.doc(newDocId), newData);
-            
-            // 2. Delete the old document (MERGE/DELETE)
-            batch.delete(oldEntriesRef.doc(oldDocId));
-
-            batchCount++;
-            
-            if (batchCount >= 490) {
-                await batch.commit();
-                console.log(`Committed batch: ${batchCount} operations.`);
-                batch = db.batch();
-                batchCount = 0;
-            }
-        }
-
-        if (batchCount > 0) {
-            await batch.commit();
-        }
-
-        console.log(`🎉 Migration complete! ${totalEntries} entries moved to /powers/...`);
-        
-    } catch (error) {
-        console.error("⚠️ Migration failed:", error);
-    }
-}
-// 🚀 ------------------------------------------ 🚀
-
-
-// --- Wait for login ---
-auth.onAuthStateChanged(user => {
-  if (!user) {
-    window.location.href = "login.html";
-    return;
+// Redirect if not logged in
+auth.onAuthStateChanged(user=>{
+  if(!user) location.href="login.html";
+  else {
+    // Set default date to today
+    dateInput.valueAsDate = new Date();
+    loadEntries();
   }
-  uid = user.uid;
-  
-  // 💡 TEMPORARY: RUN THE MIGRATION FUNCTION ONCE!
-  // Check console for "Migration complete" message.
-  migrateOldData(uid); 
-
-  loadAllEntries(); 
 });
 
-// ----------------------
-// FIREBASE LOADERS (Rest of the script is unchanged)
-// ----------------------
+// Sign out
+document.getElementById("signOutBtn").onclick = ()=> auth.signOut().then(()=>location.href="login.html");
 
-function loadAllEntries() {
-  db.collection("powers").doc(uid).collection("entries")
-    .orderBy("date", "desc") 
-    .onSnapshot(snapshot => {
-      allEntriesData = {};
-      const uniquePlayers = new Set();
-      
-      snapshot.forEach(doc => {
-        const data = doc.data();
-        data.id = doc.id;
-        // NOTE: If using the old /users/ structure, the player field might have been 'name' instead of 'player'.
-        // Assuming your working Dashboard uses the 'player' field now.
-        uniquePlayers.add(data.player); 
+// --- CRUD Functions ---
 
-        if (!allEntriesData[data.player]) {
-          allEntriesData[data.player] = [];
-        }
-        allEntriesData[data.player].push(data);
-      });
-      
-      renderPlayersList(Array.from(uniquePlayers).sort());
-    });
-}
-
-function renderPlayersList(names) {
-    playersList.innerHTML = "";
-    
-    if (!selectedPlayer && names.length > 0) {
-        selectedPlayer = names[0];
-    }
-    
-    names.forEach(name => {
-        const li = document.createElement("li");
-        li.textContent = name;
-        li.dataset.name = name;
-        if (selectedPlayer === name) li.classList.add("selected");
-        playersList.appendChild(li);
-    });
-    
-    renderEntries(); 
-}
-
-function renderEntries() {
-  entriesList.innerHTML = "";
-  if (!selectedPlayer) {
-    entriesList.innerHTML = '<li style="color:#555">Select a player to see entries</li>';
-    return;
-  }
+async function loadEntries(){
+  const user = auth.currentUser;
+  const snapshot = await db.collection('powers').doc(user.uid).collection('entries').orderBy('date','desc').get();
+  const tbody = document.getElementById('entryTable');
+  tbody.innerHTML = '';
   
-  const entries = allEntriesData[selectedPlayer] || [];
+  snapshot.forEach(doc=>{
+    const data = doc.data();
+    const dateDisplay = new Date(data.date).toLocaleDateString();
+    
+    // Format date for 'YYYY-MM-DD' for date input compatibility in edit function
+    const dateValue = data.date.substring(0, 10); 
 
-  if (entries.length === 0) {
-    entriesList.innerHTML = '<li style="color:#555">No entries yet</li>';
-    return;
-  }
-  
-  entries.forEach(e => {
-    const li = document.createElement("li");
-    li.textContent = `${e.date.substring(0, 10)}: ${Number(e.power).toLocaleString()} Power`;
-    li.dataset.id = e.id;
-    if (selectedEntryId === e.id) li.classList.add("selected");
-    entriesList.appendChild(li);
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${data.name}</td>
+      <td>${data.power.toLocaleString()}</td>
+      <td>${dateDisplay}</td>
+      <td>
+        <button class="edit" onclick="editEntry('${doc.id}', '${data.name}', ${data.power}, '${dateValue}')">Edit</button>
+        <button class="delete" onclick="deleteEntry('${doc.id}')">Delete</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
   });
 }
 
-// ----------------------
-// PLAYER EVENTS
-// ----------------------
-addPlayerBtn.addEventListener("click", () => {
-  const name = playerNameInput.value.trim();
-  if (!name) return alert("Enter name");
+// Function to populate the form for editing
+function editEntry(id, name, power, date){
+    // 1. Populate fields
+    playerName.value = name;
+    powerInput.value = power;
+    dateInput.value = date;
+    
+    // 2. Store document ID
+    editDocId.value = id;
+    
+    // 3. Update button state
+    saveBtn.textContent = 'Update Entry';
+    saveBtn.style.backgroundColor = '#10b981'; // Green for update
+    cancelEditBtn.style.display = 'inline-block';
+    
+    // Scroll to the top of the form
+    window.scrollTo(0, 0);
+}
+
+// Add / update power handler
+saveBtn.onclick = async ()=>{
+  const name = playerName.value.trim();
+  const power = parseFloat(powerInput.value);
+  let date = dateInput.value;
+  const id = editDocId.value;
   
-  db.collection("powers").doc(uid).collection("entries").add({
-    player: name,
-    date: new Date().toISOString().substring(0, 10),
-    power: 0
-  })
-  .then(() => {
-    playerNameInput.value = "";
-    selectedPlayer = name; 
-  });
-});
-
-deletePlayerBtn.addEventListener("click", () => {
-  if (!selectedPlayer) return alert("Select player");
-
-  if (!confirm(`Delete player "${selectedPlayer}" and all entries?`)) return;
-
-  db.collection("powers").doc(uid).collection("entries")
-    .where("player", "==", selectedPlayer)
-    .get()
-    .then(s => {
-      const batch = db.batch();
-      s.forEach(doc => batch.delete(doc.ref));
-      return batch.commit();
-    })
-    .then(() => {
-      selectedPlayer = null;
-      selectedEntryId = null;
-    });
-});
-
-playersList.addEventListener("click", e => {
-  const li = e.target.closest("li");
-  if (!li) return;
+  if(!name || isNaN(power) || power <= 0){ alert("Enter a valid player name and power."); return; }
   
-  playersList.querySelectorAll('li').forEach(item => item.classList.remove('selected'));
+  // If no date is set, use today's date in ISO format
+  if(!date) date = new Date().toISOString().substring(0, 10); 
   
-  selectedPlayer = li.dataset.name;
-  selectedEntryId = null;
-  
-  li.classList.add("selected");
-  renderEntries();
-});
+  // Convert date to ISO string for storage/sorting consistency (YYYY-MM-DDTHH:MM:SS.sssZ)
+  // We use the date input value (YYYY-MM-DD) and append T00:00:00.000Z
+  const isoDate = new Date(date + 'T00:00:00.000Z').toISOString();
 
-// ----------------------
-// ENTRY EVENTS
-// ----------------------
-saveEntryBtn.addEventListener("click", () => {
-  if (!selectedPlayer) return alert("Select a player");
-
-  const date = entryDate.value;
-  const power = Number(entryPower.value);
-  if (!date || isNaN(power) || power < 0) return alert("Enter a valid date and non-negative power value");
-
-  const isoDate = date.substring(0, 10);
+  const user = auth.currentUser;
   
-  const docId = selectedEntryId || `${selectedPlayer}_${isoDate}`; 
+  const data = { name, power, date: isoDate };
 
-  db.collection("powers").doc(uid).collection("entries").doc(docId)
-    .set({ 
-      player: selectedPlayer, 
-      date: isoDate, 
-      power: power 
-    })
-    .then(() => {
-      selectedEntryId = null; 
-    });
-});
-
-deleteEntryBtn.addEventListener("click", () => {
-  if (!selectedEntryId) return alert("Select entry");
-  
-  db.collection("powers").doc(uid).collection("entries").doc(selectedEntryId).delete()
-    .then(() => {
-        selectedEntryId = null;
-    });
-});
-
-// select entry
-entriesList.addEventListener("click", e => {
-  const li = e.target.closest("li");
-  if (!li) return;
-  
-  entriesList.querySelectorAll('li').forEach(item => item.classList.remove('selected'));
-  
-  selectedEntryId = li.dataset.id;
-  li.classList.add("selected");
-  
-  const data = allEntriesData[selectedPlayer].find(entry => entry.id === selectedEntryId);
-  if (data) {
-      entryDate.value = data.date.substring(0, 10);
-      entryPower.value = data.power;
+  if(id){
+    // UPDATE existing entry
+    await db.collection('powers').doc(user.uid).collection('entries').doc(id).update(data);
+    alert('Entry updated successfully!');
+  } else {
+    // ADD new entry
+    await db.collection('powers').doc(user.uid).collection('entries').add(data);
+    alert('New entry added successfully!');
   }
-});
+
+  resetForm();
+  loadEntries();
+}
+
+// Delete entry
+async function deleteEntry(id){
+  if(!confirm("Are you sure you want to delete this entry?")) return;
+  const user = auth.currentUser;
+  await db.collection('powers').doc(user.uid).collection('entries').doc(id).delete();
+  loadEntries();
+}
+
+// Reset form state after save/update or cancel
+function resetForm(){
+    playerName.value='';
+    powerInput.value='';
+    dateInput.valueAsDate = new Date(); // Reset to today
+    editDocId.value = '';
+    saveBtn.textContent = 'Add / Update Power';
+    saveBtn.style.backgroundColor = '#3b82f6'; // Blue default
+    cancelEditBtn.style.display = 'none';
+}
+
+// Event listener for cancel button
+cancelEditBtn.onclick = resetForm;
 </script>
 </body>
 </html>
