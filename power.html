@@ -2,69 +2,51 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Power Tracker</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Add Player Power</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-
 <style>
-body{font-family:Inter,sans-serif;margin:0;background:#f8fafc;color:#1e293b;}
-header{background:#1e40af;color:#fff;padding:1rem 1.5rem;display:flex;justify-content:space-between;align-items:center;}
-header h1{margin:0;font-size:1.25rem;}
-nav{display:flex;justify-content:center;gap:10px;padding:.75rem;background:#e2e8f0;}
-nav a{color:#fff;text-decoration:none;padding:.6rem 1rem;background:#3b82f6;border-radius:6px;font-weight:600;}
-nav a:hover{opacity:.9;transform:translateY(-1px);}
-main{max-width:900px;margin:1.25rem auto;padding:0 1rem;}
-form{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:1rem;}
-form input, form select, form button{padding:.5rem;border-radius:6px;border:1px solid #ccc;font-size:1rem;}
-form button{border:none;background:#3b82f6;color:#fff;font-weight:600;cursor:pointer;}
-form button:hover{background:#2563eb;}
-table{width:100%;border-collapse:collapse;margin-top:1rem;}
-th,td{padding:.6rem .8rem;text-align:left;border-bottom:1px solid #ccc;}
-th{background:#e2e8f0;}
-td.number{text-align:right;}
-.delete-btn{background:#ef4444;color:#fff;border:none;padding:.3rem .6rem;border-radius:4px;cursor:pointer;}
-.delete-btn:hover{background:#dc2626;}
-.edit-btn{background:#fbbf24;color:#000;border:none;padding:.3rem .6rem;border-radius:4px;cursor:pointer;}
-.edit-btn:hover{background:#f59e0b;}
+body { font-family: Inter, sans-serif; margin:0; background:#f8fafc; color:#1e293b; }
+header { background:#1e40af; color:#fff; padding:1rem 1.5rem; display:flex; justify-content:space-between; align-items:center; }
+header h1 { margin:0; font-size:1.25rem; }
+header button { background:#ef4444; color:#fff; border:none; padding:.5rem 1rem; border-radius:6px; cursor:pointer; font-weight:600; }
+main { max-width:600px; margin:1.25rem auto; padding:0 1rem; }
+form { display:flex; flex-direction:column; gap:1rem; background:#fff; padding:1rem; border-radius:10px; box-shadow:0 4px 15px rgba(0,0,0,.08);}
+input, select { padding:.6rem; border-radius:6px; border:1px solid #ccc; font-size:1rem; }
+button.save { background:#3b82f6; color:#fff; border:none; padding:.6rem; font-weight:600; border-radius:6px; cursor:pointer; }
+button.save:hover { background:#2563eb; }
 </style>
-</head>
 
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+</head>
 <body>
 
 <header>
-  <h1>Power Tracker</h1>
+  <h1>Add Player Power</h1>
+  <button id="signOutBtn">Sign Out</button>
 </header>
 
-<nav>
-  <a href="index.html">Dashboard</a>
-  <a href="compare.html">Compare</a>
-</nav>
-
 <main>
-  <form id="playerForm">
-    <input type="text" id="playerName" placeholder="Player Name" required>
-    <input type="number" id="playerPower" placeholder="Power" required>
-    <button type="submit">Add / Update</button>
-  </form>
+  <form id="powerForm">
+    <label>Player Name (select or type new):</label>
+    <input type="text" id="playerName" placeholder="Enter player name or select from list" list="playerList" required>
+    <datalist id="playerList"></datalist>
 
-  <table id="playerTable">
-    <thead>
-      <tr>
-        <th>Player</th>
-        <th>Previous Power</th>
-        <th>Current Power</th>
-        <th>% Change</th>
-        <th>Actions</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
+    <label>Date:</label>
+    <input type="date" id="entryDate" required>
+
+    <label>Power:</label>
+    <input type="number" id="power" required min="0">
+
+    <button type="submit" class="save">Save</button>
+  </form>
 </main>
 
 <script>
+// Firebase config
 const firebaseConfig = {
   apiKey: "AIzaSyAyhGftf_DfotmvL4iLx60NT98BjkbG6DM",
   authDomain: "powercompare-bafd9.firebaseapp.com",
@@ -75,100 +57,52 @@ const firebaseConfig = {
   measurementId: "G-09ENH5L0VG"
 };
 
-// Initialize Firebase
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 
-let currentUser;
-
-// Check login
-auth.onAuthStateChanged(user => {
-  if(user) {
-    currentUser = user;
-    loadPlayers();
-  } else {
-    window.location.href = "login.html";
-  }
+// Redirect if not logged in
+auth.onAuthStateChanged(user=>{
+  if(!user) window.location.href = "login.html";
+  else loadPlayers(user.uid);
 });
 
-// Add / Update player
-document.getElementById("playerForm").addEventListener("submit", e=>{
+// Sign out
+document.getElementById("signOutBtn").addEventListener("click", ()=>{
+  auth.signOut().then(()=>window.location.href="login.html");
+});
+
+// Load existing players for this user
+async function loadPlayers(uid){
+  const snapshot = await db.collection('powers').doc(uid).collection('entries').get();
+  const players = [...new Set(snapshot.docs.map(d=>d.data().name))].sort();
+  const datalist = document.getElementById("playerList");
+  datalist.innerHTML = players.map(p=>`<option value="${p}">`).join('');
+}
+
+// Save new power entry
+document.getElementById("powerForm").addEventListener("submit", async e=>{
   e.preventDefault();
   const name = document.getElementById("playerName").value.trim();
-  const power = parseInt(document.getElementById("playerPower").value);
+  const date = document.getElementById("entryDate").value;
+  const power = parseInt(document.getElementById("power").value);
 
-  if(!name || isNaN(power)) return;
+  if(!name || !date || isNaN(power)) return alert("Please fill all fields.");
 
-  // Add a new record
-  db.collection("powerData").add({
-    name,
-    power,
-    date: new Date().toISOString(),
-    userId: currentUser.uid
-  }).then(()=> {
-    document.getElementById("playerForm").reset();
-    loadPlayers();
-  });
-});
+  const uid = auth.currentUser.uid;
 
-// Load player table
-function loadPlayers(){
-  db.collection("powerData")
-    .where("userId","==",currentUser.uid)
-    .orderBy("date","asc")
-    .get()
-    .then(snapshot=>{
-      const players = {};
-      snapshot.forEach(doc=>{
-        const data = doc.data();
-        if(!players[data.name]) players[data.name] = [];
-        players[data.name].push({...data,id:doc.id});
-      });
-
-      renderTable(players);
+  try{
+    await db.collection('powers').doc(uid).collection('entries').add({
+      name, date, power
     });
-}
-
-function renderTable(players){
-  const tbody = document.querySelector("#playerTable tbody");
-  tbody.innerHTML = "";
-
-  for(const name in players){
-    const records = players[name];
-    const prev = records.length > 1 ? records[records.length-2].power : 0;
-    const current = records[records.length-1].power;
-    const change = prev ? ((current-prev)/prev*100) : 0;
-
-    const row = document.createElement("tr");
-
-    row.innerHTML = `
-      <td>${name}</td>
-      <td class="number">${prev.toLocaleString()}</td>
-      <td class="number">${current.toLocaleString()}</td>
-      <td class="number">${change.toFixed(2)}%</td>
-      <td>
-        <button class="edit-btn">Edit</button>
-        <button class="delete-btn">Delete</button>
-      </td>
-    `;
-
-    // Edit
-    row.querySelector(".edit-btn").addEventListener("click", ()=>{
-      document.getElementById("playerName").value = name;
-      document.getElementById("playerPower").value = current;
-    });
-
-    // Delete last record
-    row.querySelector(".delete-btn").addEventListener("click", ()=>{
-      const lastRecord = records[records.length-1];
-      db.collection("powerData").doc(lastRecord.id).delete().then(loadPlayers);
-    });
-
-    tbody.appendChild(row);
+    alert("Saved!");
+    document.getElementById("powerForm").reset();
+    loadPlayers(uid); // refresh list
+  }catch(err){
+    console.error(err);
+    alert("Error saving entry.");
   }
-}
+});
 </script>
-
 </body>
 </html>
