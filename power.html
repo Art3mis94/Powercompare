@@ -2,211 +2,413 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Add / Edit Power</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Power Manager — Add/Edit Entries</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-
 <style>
-body{font-family:Inter,sans-serif;margin:0;background:#f8fafc;color:#1e293b;}
-header{background:#1e40af;color:#fff;padding:1rem 1.5rem;display:flex;justify-content:space-between;align-items:center;}
-header h1{margin:0;font-size:1.25rem;}
-button{padding:.5rem 1rem;border-radius:6px;border:none;background:#3b82f6;color:#fff;cursor:pointer;}
-button:hover{opacity:.9;}
-nav{display:flex;justify-content:center;gap:10px;padding:.75rem;background:#e2e8f0;}
-nav a{background:#3b82f6;color:#fff;padding:.6rem 1rem;border-radius:6px;text-decoration:none;font-weight:600;}
-nav a:hover{opacity:.9;}
-main{max-width:600px;margin:1.5rem auto;padding:0 1rem;}
-.section{background:#fff;padding:1rem;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,0.05);}
-label{display:block;margin:.5rem 0 .2rem;font-weight:500;}
-input, select{width:100%;padding:.5rem;border-radius:6px;border:1px solid #ccc;margin-bottom:.5rem;}
-table{width:100%;border-collapse:collapse;margin-top:1rem;}
-th, td{padding:.5rem;border-bottom:1px solid #ccc;text-align:left;}
-button.delete{background:#ef4444; margin-right: 5px;}
-button.edit{background:#f59e0b;} /* New Edit button style */
+    :root{--bg:#f8fafc;--text:#1e293b;--card:#ffffff;--accent:#3b82f6;--muted:#475569;--success:#10b981;--danger:#ef4444;}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter,system-ui;background:var(--bg);color:var(--text);transition:all .25s;}
+    header{background:#1e40af;color:#fff;padding:1rem 1.5rem;display:flex;justify-content:space-between;align-items:center;box-shadow:0 2px 4px rgba(0,0,0,.08);}
+    header h1{margin:0;font-size:1.25rem;font-weight:600;}
+    button.signOut{background:#3b82f6;border:none;color:#fff;padding:.45rem .7rem;border-radius:8px;cursor:pointer;font-weight:600;}
+    nav{display:flex;justify-content:center;gap:10px;padding:0.75rem;background:#e2e8f0;}
+    nav a{color:#fff;text-decoration:none;padding:.6rem 1rem;background:var(--accent);border-radius:6px;font-weight:600;}
+    nav a:hover{opacity:.95;transform:translateY(-1px);}
+    .main-wrap{max-width:1000px;margin:1.25rem auto;padding:0 1rem;display:grid;gap:1rem;grid-template-columns:1fr 1fr;align-items:start;}
+    .section{background:var(--card);padding:1rem;border-radius:12px;box-shadow:0 6px 20px rgba(2,6,23,0.04);}
+    .section h2{margin:0 0 .75rem;font-size:1.05rem;}
+    .form-row{display:flex;gap:.5rem;flex-wrap:wrap;}
+    .input,.select{width:100%;padding:.5rem;border-radius:8px;border:1px solid #e2e8f0;font-size:0.95rem;}
+    .button-row{display:flex;gap:.5rem;justify-content:flex-end;margin-top:.75rem;}
+    .btn{padding:.55rem .9rem;border-radius:8px;border:0;color:#fff;font-weight:600;cursor:pointer;}
+    .btn.save{background:var(--success)}.btn.save:hover{background:#059669}
+    .btn.cancel{background:#6b7280}.btn.cancel:hover{background:#4b5563}
+    .btn.delete{background:var(--danger)}.btn.delete:hover{background:#dc2626}
+    .small-btn{padding:.35rem .6rem;font-size:.85rem;border-radius:6px;}
+    .players-list{margin:0;padding:0;list-style:none;max-height:450px;overflow-y:auto;}
+    .players-list li{display:flex;align-items:center;justify-content:space-between;padding:.5rem;border-radius:8px;margin-bottom:.45rem;background:linear-gradient(180deg,rgba(0,0,0,0.01),transparent);box-shadow:0 1px 0 rgba(2,6,23,0.03);cursor:pointer;}
+    .players-list li:hover{background:rgba(59,130,246,0.05);}
+    .players-list .name{font-weight:600;flex:1;}
+    .players-list .actions button{margin-left:8px;}
+    .select-group{display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-top:.6rem;}
+    .select-group label{font-weight:500;color:var(--muted);display:block;}
+    .player-entry-item{padding:.5rem;border-radius:8px;border:1px solid #e2e8f0;margin-bottom:.5rem;display:flex;justify-content:space-between;align-items:center;}
+    .player-entry-item:hover{background:#f1f5f9;}
+    .player-entry-item.selected{border-color:var(--accent);background:#eff6ff;}
+    .player-entry-item .date{font-weight:600;}
+    .player-entry-item .power{font-size:0.9rem;color:var(--muted);}
+    @media (max-width:900px){.main-wrap{grid-template-columns:1fr;}}
 </style>
 </head>
 <body>
+  <header>
+    <h1>Power Manager</h1>
+    <button id="signOutBtn" class="signOut">Sign Out</button>
+  </header>
 
-<header>
-  <h1>Add / Edit Power</h1>
-  <button id="signOutBtn">Sign Out</button>
-</header>
+  <nav>
+    <a href="index.html">Dashboard</a>
+    <a href="compare.html">Compare</a>
+  </nav>
 
-<nav>
-  <a href="index.html">Dashboard</a>
-  <a href="compare.html">Compare</a>
-</nav>
+  <main class="main-wrap">
+    <section class="section" id="playersSection">
+      <h2>Player Management</h2>
+      <form id="playerForm" autocomplete="off">
+        <div class="form-row">
+          <input id="playerNameInput" placeholder="Enter new player name" class="input" />
+        </div>
+        <div class="button-row">
+          <button type="submit" class="btn save" id="playerAddBtn">Add Player</button>
+          <button type="button" class="btn cancel" id="playerCancelBtn">Clear</button>
+        </div>
+      </form>
 
-<main>
-<div class="section">
-  <label for="playerName">Player Name</label>
-  <input type="text" id="playerName" placeholder="Type new or existing player name">
+      <hr style="margin:12px 0;border:none;border-top:1px solid #eef2f7"/>
+      <h3 style="margin:.25rem 0 .6rem 0">Players (Click name to view/edit entries)</h3>
+      <ul class="players-list" id="playersList"></ul>
+    </section>
 
-  <label for="powerInput">Power</label>
-  <input type="number" id="powerInput" placeholder="Enter power value">
+    <section class="section" id="statsSection">
+      <h2>Add / Edit Entry</h2>
+      
+      <div>
+        <label class="muted">Selected Player</label>
+        <div id="selectedPlayerDisplay" style="padding:.5rem;background:#f1f5f9;border-radius:8px;font-weight:600;">—</div>
+      </div>
 
-  <label for="dateInput">Date</label>
-  <input type="date" id="dateInput">
-  <small>If left empty, today's date will be used.</small>
+      <div class="select-group">
+        <div>
+            <label for="dateInput">Date</label>
+            <input type="date" id="dateInput" class="input">
+        </div>
+        <div>
+            <label for="powerInput">Power</label>
+            <input type="number" id="powerInput" placeholder="Enter power value" class="input">
+        </div>
+      </div>
+      
+      <div style="margin-top:1rem;">
+        <h3 style="margin:0 0 .5rem 0; font-size: 0.95rem;">Existing Entries for <span id="entriesPlayerName">—</span> (Click to Edit)</h3>
+        <div id="entriesList" style="max-height: 200px; overflow-y: auto;">
+            <p id="noEntriesMessage" style="text-align:center; color:var(--muted); font-size:0.9rem; margin:1rem 0;">No entries for this player yet.</p>
+        </div>
+      </div>
 
-  <input type="hidden" id="editDocId">
+      <input type="hidden" id="editDocId">
 
-  <button id="saveBtn">Add / Update Power</button>
-  <button id="cancelEditBtn" style="display:none; background:#6b7280;">Cancel Edit</button>
-</div>
+      <div class="button-row" style="margin-top:.8rem">
+        <button class="btn save" id="statsSaveBtn">Save/Update Power</button>
+        <button class="btn delete" id="statsDeleteBtn" disabled>Delete Entry</button>
+      </div>
+      <div class="button-row">
+        <button class="btn cancel" id="clearFormBtn">Clear Form</button>
+      </div>
+    </section>
+  </main>
 
-<div class="section">
-  <h3>Current Entries (Latest First)</h3>
-  <table>
-    <thead>
-      <tr><th>Player</th><th>Power</th><th>Date</th><th>Action</th></tr>
-    </thead>
-    <tbody id="entryTable"></tbody>
-  </table>
-</div>
+  <script>
+    // Firebase config (Use your actual configuration)
+    const firebaseConfig = {
+      apiKey: "AIzaSyAyhGftf_DfotmvL4iLx60NT98BjkbG6DM",
+      authDomain: "powercompare-bafd9.firebaseapp.com",
+      projectId: "powercompare-bafd9",
+      storageBucket: "powercompare-bafd9.firebasestorage.app",
+      messagingSenderId: "768897803088",
+      appId: "1:768897803088:web:ff55aed87037cef6720255",
+      measurementId: "G-09ENH5L0VG"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
 
-<script>
-// Firebase config (Use your actual configuration)
-const firebaseConfig = {
-  apiKey: "AIzaSyAyhGftf_DfotmvL4iLx60NT98BjkbG6DM",
-  authDomain: "powercompare-bafd9.firebaseapp.com",
-  projectId: "powercompare-bafd9",
-  storageBucket: "powercompare-bafd9.firebasestorage.app",
-  messagingSenderId: "768897803088",
-  appId: "1:768897803088:web:ff55aed87037cef6720255",
-  measurementId: "G-09ENH5L0VG"
-};
-firebase.initializeApp(firebaseConfig);
-const auth = firebase.auth();
-const db = firebase.firestore();
+    // Global state
+    let currentUserUid = null;
+    let currentPlayer = null;
+    let allPlayersData = {}; // Stores {playerName: [entry1, entry2, ...]}
 
-// DOM elements
-const playerName = document.getElementById('playerName');
-const powerInput = document.getElementById('powerInput');
-const dateInput = document.getElementById('dateInput');
-const editDocId = document.getElementById('editDocId');
-const saveBtn = document.getElementById('saveBtn');
-const cancelEditBtn = document.getElementById('cancelEditBtn');
+    // --- DOM Elements ---
+    const E = {
+        playerNameInput: document.getElementById('playerNameInput'),
+        playersList: document.getElementById('playersList'),
+        selectedPlayerDisplay: document.getElementById('selectedPlayerDisplay'),
+        entriesPlayerName: document.getElementById('entriesPlayerName'),
+        entriesList: document.getElementById('entriesList'),
+        dateInput: document.getElementById('dateInput'),
+        powerInput: document.getElementById('powerInput'),
+        editDocId: document.getElementById('editDocId'),
+        statsSaveBtn: document.getElementById('statsSaveBtn'),
+        statsDeleteBtn: document.getElementById('statsDeleteBtn'),
+        noEntriesMessage: document.getElementById('noEntriesMessage')
+    };
 
-// Redirect if not logged in
-auth.onAuthStateChanged(user=>{
-  if(!user) location.href="login.html";
-  else {
-    // Set default date to today
-    dateInput.valueAsDate = new Date();
-    loadEntries();
-  }
-});
+    // --- Initialization and Auth ---
 
-// Sign out
-document.getElementById("signOutBtn").onclick = ()=> auth.signOut().then(()=>location.href="login.html");
+    auth.onAuthStateChanged(user => {
+        if (!user) {
+            location.href = "login.html";
+        } else {
+            currentUserUid = user.uid;
+            E.dateInput.valueAsDate = new Date(); // Set default date
+            loadAllPlayerNames();
+        }
+    });
 
-// --- CRUD Functions ---
-
-async function loadEntries(){
-  const user = auth.currentUser;
-  const snapshot = await db.collection('powers').doc(user.uid).collection('entries').orderBy('date','desc').get();
-  const tbody = document.getElementById('entryTable');
-  tbody.innerHTML = '';
-  
-  snapshot.forEach(doc=>{
-    const data = doc.data();
-    const dateDisplay = new Date(data.date).toLocaleDateString();
+    document.getElementById("signOutBtn").onclick = () => auth.signOut().then(() => location.href = "login.html");
     
-    // Format date for 'YYYY-MM-DD' for date input compatibility in edit function
-    const dateValue = data.date.substring(0, 10); 
+    // --- Data Loading and Player List Rendering ---
 
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${data.name}</td>
-      <td>${data.power.toLocaleString()}</td>
-      <td>${dateDisplay}</td>
-      <td>
-        <button class="edit" onclick="editEntry('${doc.id}', '${data.name}', ${data.power}, '${dateValue}')">Edit</button>
-        <button class="delete" onclick="deleteEntry('${doc.id}')">Delete</button>
-      </td>
-    `;
-    tbody.appendChild(tr);
-  });
-}
+    /** Fetches unique player names for the list. */
+    async function loadAllPlayerNames() {
+        if (!currentUserUid) return;
 
-// Function to populate the form for editing
-function editEntry(id, name, power, date){
-    // 1. Populate fields
-    playerName.value = name;
-    powerInput.value = power;
-    dateInput.value = date;
-    
-    // 2. Store document ID
-    editDocId.value = id;
-    
-    // 3. Update button state
-    saveBtn.textContent = 'Update Entry';
-    saveBtn.style.backgroundColor = '#10b981'; // Green for update
-    cancelEditBtn.style.display = 'inline-block';
-    
-    // Scroll to the top of the form
-    window.scrollTo(0, 0);
-}
+        // Fetch all entries, grouping by name. This is generally the most efficient
+        // way to get a list of unique names in Firestore without a separate 'players' collection.
+        // We'll also fetch the full data here for the entries list.
+        const snapshot = await db.collection('powers').doc(currentUserUid).collection('entries')
+                                 .orderBy('name', 'asc').orderBy('date', 'desc').get();
+        
+        allPlayersData = {};
+        const uniqueNames = new Set();
 
-// Add / update power handler
-saveBtn.onclick = async ()=>{
-  const name = playerName.value.trim();
-  const power = parseFloat(powerInput.value);
-  let date = dateInput.value;
-  const id = editDocId.value;
-  
-  if(!name || isNaN(power) || power <= 0){ alert("Enter a valid player name and power."); return; }
-  
-  // If no date is set, use today's date in ISO format
-  if(!date) date = new Date().toISOString().substring(0, 10); 
-  
-  // Convert date to ISO string for storage/sorting consistency (YYYY-MM-DDTHH:MM:SS.sssZ)
-  // We use the date input value (YYYY-MM-DD) and append T00:00:00.000Z
-  const isoDate = new Date(date + 'T00:00:00.000Z').toISOString();
+        snapshot.forEach(doc => {
+            const data = doc.data();
+            data.id = doc.id; // Store Firestore document ID
+            uniqueNames.add(data.name);
+            if (!allPlayersData[data.name]) allPlayersData[data.name] = [];
+            allPlayersData[data.name].push(data);
+        });
 
-  const user = auth.currentUser;
-  
-  const data = { name, power, date: isoDate };
+        renderPlayersList(Array.from(uniqueNames));
 
-  if(id){
-    // UPDATE existing entry
-    await db.collection('powers').doc(user.uid).collection('entries').doc(id).update(data);
-    alert('Entry updated successfully!');
-  } else {
-    // ADD new entry
-    await db.collection('powers').doc(user.uid).collection('entries').add(data);
-    alert('New entry added successfully!');
-  }
+        // If a player was previously selected, re-select them
+        if (currentPlayer) selectPlayer(currentPlayer, { skipReload: true });
+    }
 
-  resetForm();
-  loadEntries();
-}
+    /** Renders the list of selectable players. */
+    function renderPlayersList(names) {
+        if (!names.length) {
+            E.playersList.innerHTML = '<li style="color:var(--muted);padding:.6rem">No players added yet.</li>';
+            return;
+        }
+        E.playersList.innerHTML = names.map(name => {
+            const isSelected = name === currentPlayer ? 'style="background:rgba(59,130,246,0.1); border: 1px solid var(--accent);"' : '';
+            return `<li data-player="${name}" ${isSelected}>
+                        <span class="name" data-action="select">${name}</span>
+                        <span class="actions">
+                            <button class="btn delete small-btn" data-action="delete-player">Delete</button>
+                        </span>
+                    </li>`;
+        }).join('');
+    }
 
-// Delete entry
-async function deleteEntry(id){
-  if(!confirm("Are you sure you want to delete this entry?")) return;
-  const user = auth.currentUser;
-  await db.collection('powers').doc(user.uid).collection('entries').doc(id).delete();
-  loadEntries();
-}
+    // --- Player Management Actions ---
 
-// Reset form state after save/update or cancel
-function resetForm(){
-    playerName.value='';
-    powerInput.value='';
-    dateInput.valueAsDate = new Date(); // Reset to today
-    editDocId.value = '';
-    saveBtn.textContent = 'Add / Update Power';
-    saveBtn.style.backgroundColor = '#3b82f6'; // Blue default
-    cancelEditBtn.style.display = 'none';
-}
+    /** Handles adding a new player (only adds the name to the data structure) */
+    document.getElementById('playerForm').addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const name = E.playerNameInput.value.trim();
+        if (!name) return alert('Please enter a player name.');
+        
+        // Check if player name already exists in the list
+        if (Object.keys(allPlayersData).some(n => n.toLowerCase() === name.toLowerCase())) {
+            alert('A player with this name already exists.');
+            return;
+        }
 
-// Event listener for cancel button
-cancelEditBtn.onclick = resetForm;
-</script>
+        // Add a placeholder entry to force the name into the list
+        // This makes the player selectable immediately.
+        await db.collection('powers').doc(currentUserUid).collection('entries').add({
+            name: name,
+            power: 0,
+            date: new Date().toISOString().substring(0, 10) + 'T00:00:00.000Z'
+        });
+
+        E.playerNameInput.value = '';
+        await loadAllPlayerNames(); // Reloads all data and refreshes list
+        selectPlayer(name);
+    });
+
+    document.getElementById('playerCancelBtn').onclick = () => E.playerNameInput.value = '';
+
+    /** Handles player selection and deletion from the list (delegated event) */
+    E.playersList.addEventListener('click', (ev) => {
+        const li = ev.target.closest('li[data-player]');
+        if (!li) return;
+        const name = li.getAttribute('data-player');
+        
+        if (ev.target.dataset.action === 'select' || ev.target.classList.contains('name')) {
+            selectPlayer(name);
+        } else if (ev.target.dataset.action === 'delete-player') {
+            deletePlayerAndData(name);
+        }
+    });
+
+    /** Deletes all entries associated with a player name. */
+    async function deletePlayerAndData(name) {
+        if (!confirm(`Are you sure you want to delete the player "${name}" and ALL their power entries? This cannot be undone.`)) return;
+
+        const batch = db.batch();
+        const entriesToDelete = allPlayersData[name] || [];
+        
+        if (entriesToDelete.length > 0) {
+            entriesToDelete.forEach(entry => {
+                const docRef = db.collection('powers').doc(currentUserUid).collection('entries').doc(entry.id);
+                batch.delete(docRef);
+            });
+            await batch.commit();
+        }
+
+        alert(`Player "${name}" and all their entries have been deleted.`);
+        
+        if (currentPlayer === name) selectPlayer(null); // Clear selected state
+        await loadAllPlayerNames(); // Reload all data and refresh list
+    }
+
+    // --- Stats / Power Entry Logic ---
+
+    /** Selects a player and loads their existing entries. */
+    function selectPlayer(name, options = {}) {
+        currentPlayer = name;
+        E.selectedPlayerDisplay.textContent = name || '—';
+        E.entriesPlayerName.textContent = name || '—';
+        
+        // Clear the form and docId
+        E.dateInput.valueAsDate = new Date();
+        E.powerInput.value = '';
+        E.editDocId.value = '';
+        E.statsDeleteBtn.disabled = true;
+
+        if (name) {
+            renderEntriesList();
+        } else {
+            E.entriesList.innerHTML = '<p id="noEntriesMessage" style="text-align:center; color:var(--muted); font-size:0.9rem; margin:1rem 0;">Select a player to view entries.</p>';
+        }
+
+        // Re-render list to show selection highlighting
+        if (!options.skipReload) {
+            const names = Object.keys(allPlayersData);
+            renderPlayersList(names);
+        }
+    }
+
+    /** Renders the list of date/power entries for the selected player. */
+    function renderEntriesList() {
+        const entries = allPlayersData[currentPlayer] || [];
+        
+        if (entries.length === 0) {
+            E.entriesList.innerHTML = '<p id="noEntriesMessage" style="text-align:center; color:var(--muted); font-size:0.9rem; margin:1rem 0;">No entries for this player yet.</p>';
+            return;
+        }
+
+        E.entriesList.innerHTML = entries.map(entry => {
+            const dateDisplay = new Date(entry.date).toLocaleDateString();
+            const powerDisplay = (entry.power || 0).toLocaleString();
+            
+            return `
+                <div class="player-entry-item" data-doc-id="${entry.id}" onclick="loadEntryForEdit('${entry.id}')">
+                    <span class="date">${dateDisplay}</span>
+                    <span class="power">${powerDisplay} Power</span>
+                </div>
+            `;
+        }).join('');
+    }
+
+    /** Loads a specific entry into the form for editing. */
+    window.loadEntryForEdit = (docId) => {
+        const entries = allPlayersData[currentPlayer] || [];
+        const entry = entries.find(e => e.id === docId);
+
+        if (!entry) return;
+
+        // Set active class on selected item
+        document.querySelectorAll('.player-entry-item').forEach(el => el.classList.remove('selected'));
+        document.querySelector(`.player-entry-item[data-doc-id="${docId}"]`).classList.add('selected');
+        
+        // Populate form
+        E.dateInput.value = entry.date.substring(0, 10); // Firestore date string to YYYY-MM-DD
+        E.powerInput.value = entry.power;
+        E.editDocId.value = docId;
+        
+        E.statsDeleteBtn.disabled = false;
+        E.statsSaveBtn.textContent = 'Update Power';
+    };
+
+    /** Handles saving or updating the power entry. */
+    E.statsSaveBtn.onclick = async () => {
+        if (!currentPlayer) return alert('Please select a player first.');
+
+        const power = parseFloat(E.powerInput.value);
+        let date = E.dateInput.value;
+        const docId = E.editDocId.value;
+
+        if (isNaN(power) || power <= 0) return alert('Enter a valid power value.');
+        if (!date) {
+            date = new Date().toISOString().substring(0, 10);
+            E.dateInput.value = date;
+        }
+
+        // Convert date to ISO string for storage/sorting consistency (YYYY-MM-DDTHH:MM:SS.sssZ)
+        const isoDate = date + 'T00:00:00.000Z';
+        
+        const dataToSave = { 
+            name: currentPlayer, 
+            power: power, 
+            date: isoDate 
+        };
+        
+        const collectionRef = db.collection('powers').doc(currentUserUid).collection('entries');
+
+        if (docId) {
+            // UPDATE existing entry
+            await collectionRef.doc(docId).update(dataToSave);
+            alert('Entry updated successfully!');
+        } else {
+            // ADD new entry
+            await collectionRef.add(dataToSave);
+            alert('New entry added successfully!');
+        }
+
+        // Reset and reload data
+        await loadAllPlayerNames(); 
+        selectPlayer(currentPlayer, { skipReload: true }); 
+        
+        // Reset form to Add state
+        E.statsSaveBtn.textContent = 'Save/Update Power';
+    };
+
+    /** Handles deleting the currently selected entry. */
+    E.statsDeleteBtn.onclick = async () => {
+        const docId = E.editDocId.value;
+        if (!docId) return;
+
+        if (!confirm('Are you sure you want to delete this specific entry?')) return;
+
+        await db.collection('powers').doc(currentUserUid).collection('entries').doc(docId).delete();
+        alert('Entry deleted.');
+
+        // Reset and reload data
+        await loadAllPlayerNames();
+        selectPlayer(currentPlayer, { skipReload: true });
+        
+        // Reset form to Add state
+        E.statsSaveBtn.textContent = 'Save/Update Power';
+    };
+
+    /** Clears the stats form only. */
+    document.getElementById('clearFormBtn').onclick = () => {
+        E.dateInput.valueAsDate = new Date();
+        E.powerInput.value = '';
+        E.editDocId.value = '';
+        E.statsDeleteBtn.disabled = true;
+        E.statsSaveBtn.textContent = 'Save/Update Power';
+        document.querySelectorAll('.player-entry-item').forEach(el => el.classList.remove('selected'));
+    };
+
+  </script>
 </body>
 </html>
