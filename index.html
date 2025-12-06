@@ -2,36 +2,85 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Player Dashboard</title>
+<title>Player Dashboard — Power Tracker</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-
 <style>
-body{font-family:Inter,sans-serif;margin:0;background:#f8fafc;color:#1e293b;}
-header{background:#1e40af;color:#fff;padding:1rem 1.5rem;display:flex;justify-content:space-between;align-items:center;}
-header h1{margin:0;font-size:1.25rem;}
-button{padding:.5rem 1rem;border-radius:6px;border:none;background:#3b82f6;color:#fff;cursor:pointer;}
-button:hover{opacity:.9;}
-nav{display:flex;justify-content:center;gap:10px;padding:.75rem;background:#e2e8f0;}
-nav a{background:#3b82f6;color:#fff;padding:.6rem 1rem;border-radius:6px;text-decoration:none;font-weight:600;}
-nav a:hover{opacity:.9;}
-main{max-width:900px;margin:1.5rem auto;padding:0 1rem;}
-table{width:100%;border-collapse:collapse;margin-top:1rem;}
-th,td{padding:.6rem;border-bottom:1px solid #ccc;text-align:left;}
-td.percent{text-align:right;}
-tr.selected{background:rgba(59,130,246,0.2);}
-.overlay{
-  position:fixed;top:0;left:0;width:100%;height:100%;
-  background:rgba(0,0,0,0.5);display:flex;justify-content:center;align-items:center;
-  visibility:hidden;opacity:0;transition:opacity .3s;
+body {
+    font-family: Inter,sans-serif;
+    margin:0;
+    background:#f8fafc;
+    color:#1e293b;
 }
-.overlay .content{
-  background:#fff;padding:1.5rem;border-radius:12px;max-width:500px;width:90%;
+header {
+    background:#1e40af;
+    color:#fff;
+    padding:1rem 1.5rem;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
 }
-.overlay.visible{visibility:visible;opacity:1;}
+header h1 { margin:0; font-size:1.25rem; }
+button { padding:.5rem 1rem; border-radius:6px; border:none; background:#3b82f6; color:#fff; cursor:pointer; }
+button:hover { opacity:.9; }
+nav { display:flex; justify-content:center; gap:10px; padding:.75rem; background:#e2e8f0; }
+nav a { background:#3b82f6; color:#fff; padding:.6rem 1rem; border-radius:6px; text-decoration:none; font-weight:600; }
+nav a:hover { opacity:.9; }
+main { max-width:900px; margin:1.5rem auto; padding:0 1rem; }
+table { width:100%; border-collapse:collapse; margin-top:1rem; }
+th, td { padding:.6rem; border-bottom:1px solid #ccc; text-align:left; }
+tr.selected { background:rgba(59,130,246,0.2); cursor:pointer; }
+
+/* Overlay Styles */
+#overlay {
+    position:fixed;
+    top:0;
+    left:0;
+    width:100%;
+    height:100%;
+    background:rgba(0,0,0,0.5);
+    display:none;
+    align-items:center;
+    justify-content:center;
+    z-index:1000;
+}
+#overlay > div {
+    max-width:90%;
+    max-height:90%;
+    overflow:auto;
+    background:#fff;
+    padding:1.5rem;
+    border-radius:12px;
+    box-shadow:0 6px 20px rgba(0,0,0,0.3);
+}
+#overlay table {
+    width:100%;
+    border-collapse:collapse;
+    margin-top:1rem;
+}
+#overlay th, #overlay td {
+    padding:.8rem 1rem;
+    text-align:center;
+    border-bottom:1px solid #eee;
+}
+#overlay th {
+    background:#1e40af;
+    color:#fff;
+    position:sticky;
+    top:0;
+}
+#overlay td.positive { color:#10b981; font-weight:600; }
+#overlay td.negative { color:#ef4444; font-weight:600; }
+#overlay button {
+    margin-top:1rem;
+    padding:.6rem 1.2rem;
+    border:none;
+    border-radius:6px;
+    background:#ef4444;
+    color:#fff;
+    font-weight:600;
+    cursor:pointer;
+}
 </style>
 </head>
 <body>
@@ -42,8 +91,9 @@ tr.selected{background:rgba(59,130,246,0.2);}
 </header>
 
 <nav>
+  <a href="index.html">Dashboard</a>
+  <a href="compare.html">Compare</a>
   <a href="power.html">Add / Edit Power</a>
-  <a href="compare.html">Compare Players</a>
 </nav>
 
 <main>
@@ -51,22 +101,43 @@ tr.selected{background:rgba(59,130,246,0.2);}
     <thead>
       <tr>
         <th>Player</th>
-        <th>Previous Power</th>
-        <th>Current Power</th>
-        <th>% Change</th>
+        <th>Latest Power</th>
+        <th>% Change (7-Day)</th>
       </tr>
     </thead>
     <tbody></tbody>
   </table>
+  <div style="margin-top:1rem;">
+    <button id="showOverlayBtn">View Performance Overview</button>
+  </div>
 </main>
 
-<div class="overlay" id="compareOverlay">
-  <div class="content">
-    <h3>Comparison</h3>
-    <div id="comparisonResult"></div>
-    <button onclick="closeOverlay()">Close</button>
+<!-- Overlay for Player Stats -->
+<div id="overlay">
+  <div>
+    <h2 style="margin-top:0; text-align:center; color:#1e40af;">Player Performance Overview</h2>
+    <table id="compareTable">
+      <thead>
+        <tr>
+          <th>Player</th>
+          <th>Latest Power</th>
+          <th>7-Day Growth</th>
+          <th>Trend</th>
+          <th>Avg Daily Gain</th>
+          <th>Rank</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <div style="text-align:center;">
+      <button id="closeOverlay">Close</button>
+    </div>
   </div>
 </div>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
 <script>
 // Firebase config
@@ -83,90 +154,99 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 
-let selectedPlayers = [];
+let uid = null;
+let allEntriesData = {};
 
-// Redirect if not logged in
+// Elements
+const playerTableBody = document.querySelector('#playerTable tbody');
+const showOverlayBtn = document.getElementById('showOverlayBtn');
+const overlay = document.getElementById('overlay');
+const compareTableBody = document.querySelector('#compareTable tbody');
+
 auth.onAuthStateChanged(user => {
-  if(!user) {
-    location.href="login.html";
-  } else {
-    listenPlayerEntries(user.uid);
-  }
+  if(!user) return window.location.href = "login.html";
+  uid = user.uid;
+  loadPlayers();
 });
 
-// Sign out
-document.getElementById("signOutBtn").onclick = () => auth.signOut().then(()=>location.href="login.html");
+document.getElementById('signOutBtn').onclick = ()=> auth.signOut().then(()=>location.href="login.html");
 
-// Listen for real-time updates
-function listenPlayerEntries(uid) {
+// Load players and latest power
+function loadPlayers(){
   db.collection("powers").doc(uid).collection("entries")
-    .orderBy("date","asc")
-    .onSnapshot(snapshot => {
-      const playerData = {};
-      snapshot.forEach(doc => {
-        const {player, power, date} = doc.data();
-        if(!playerData[player]) playerData[player] = [];
-        playerData[player].push({date, power});
+    .orderBy("player", "asc")
+    .orderBy("date", "asc")
+    .onSnapshot(snapshot=>{
+      allEntriesData = {};
+      playerTableBody.innerHTML = '';
+
+      snapshot.forEach(doc=>{
+        const data = doc.data();
+        data.id = doc.id;
+        if(!allEntriesData[data.player]) allEntriesData[data.player] = [];
+        allEntriesData[data.player].push(data);
       });
-      renderTable(playerData);
+
+      // Render table
+      Object.entries(allEntriesData).forEach(([name, entries])=>{
+        entries.sort((a,b)=>new Date(a.date)-new Date(b.date));
+        const latest = entries[entries.length-1];
+        const sevenDaysAgo = new Date(latest.date);
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate()-7);
+        const lastWeekEntries = entries.filter(e=>new Date(e.date)>=sevenDaysAgo);
+        const earliest = lastWeekEntries[0] || latest;
+        const change = earliest.power ? ((latest.power-earliest.power)/earliest.power*100) : 0;
+
+        const tr = document.createElement('tr');
+        tr.dataset.name = name;
+        tr.innerHTML = `
+          <td>${name}</td>
+          <td>${latest.power.toLocaleString()}</td>
+          <td style="color:${change>=0?'#10b981':'#ef4444'}">${change.toFixed(2)}%</td>
+        `;
+        tr.onclick = ()=> tr.classList.toggle('selected');
+        playerTableBody.appendChild(tr);
+      });
     });
 }
 
-// Render table with previous & current power
-function renderTable(data) {
-  const tbody = document.querySelector("#playerTable tbody");
-  tbody.innerHTML = '';
+// Overlay
+showOverlayBtn.onclick = ()=>{
+  const selected = [...playerTableBody.querySelectorAll('tr.selected')].map(tr=>tr.dataset.name);
+  if(selected.length === 0) return alert("Select at least 1 player");
 
-  Object.entries(data).forEach(([player, entries]) => {
-    // Sort by date ascending
-    entries.sort((a,b) => new Date(a.date) - new Date(b.date));
-    const current = entries[entries.length-1].power;
-    const previous = entries.length > 1 ? entries[entries.length-2].power : 0;
-    const change = previous>0 ? ((current-previous)/previous*100) : (current>0 ? Infinity : 0);
-    const changeDisplay = change===Infinity ? '+∞%' : `${change>=0?'+':''}${change.toFixed(2)}%`;
+  compareTableBody.innerHTML = '';
+  const overviewData = selected.map(name=>{
+    const entries = allEntriesData[name];
+    entries.sort((a,b)=>new Date(a.date)-new Date(b.date));
+    const latest = entries[entries.length-1];
+    const sevenDaysAgo = new Date(latest.date); sevenDaysAgo.setDate(sevenDaysAgo.getDate()-7);
+    const lastWeekEntries = entries.filter(e=>new Date(e.date)>=sevenDaysAgo);
+    const earliest = lastWeekEntries[0] || latest;
+    const growth = earliest.power ? ((latest.power-earliest.power)/earliest.power*100) : 0;
+    const trend = growth>0?'⬆️':(growth<0?'⬇️':'→');
+    const days = lastWeekEntries.length>1?(new Date(lastWeekEntries[lastWeekEntries.length-1].date)-new Date(lastWeekEntries[0].date))/86400000:1;
+    const avgGain = days>0?(latest.power-earliest.power)/days:0;
+    return {name, latest:latest.power, growth, trend, avgGain};
+  });
 
+  overviewData.sort((a,b)=>b.latest-a.latest).forEach((d,i)=>{
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td>${player}</td>
-      <td>${previous.toLocaleString()}</td>
-      <td>${current.toLocaleString()}</td>
-      <td class="percent">${changeDisplay}</td>
+      <td>${d.name}</td>
+      <td>${d.latest.toLocaleString()}</td>
+      <td style="color:${d.growth>=0?'#10b981':'#ef4444'}">${d.growth.toFixed(2)}%</td>
+      <td>${d.trend}</td>
+      <td>${d.avgGain.toFixed(1)}</td>
+      <td>${i+1}</td>
     `;
-    tr.onclick = ()=> toggleSelect(tr, player, previous, current);
-    tbody.appendChild(tr);
+    compareTableBody.appendChild(tr);
   });
-}
 
-// Handle selection for comparison
-function toggleSelect(tr, name, prev, curr) {
-  const index = selectedPlayers.findIndex(p => p.name===name);
-  if(index>-1) {
-    selectedPlayers.splice(index,1);
-    tr.classList.remove('selected');
-  } else {
-    selectedPlayers.push({name, prev, curr});
-    tr.classList.add('selected');
-  }
-  if(selectedPlayers.length>1) showOverlay();
-}
+  overlay.style.display='flex';
+};
 
-// Overlay
-function showOverlay() {
-  const overlay = document.getElementById("compareOverlay");
-  const container = document.getElementById("comparisonResult");
-  container.innerHTML = selectedPlayers.map(p=>{
-    const change = p.prev>0 ? ((p.curr-p.prev)/p.prev*100) : (p.curr>0 ? Infinity : 0);
-    const changeDisplay = change===Infinity ? '+∞%' : `${change>=0?'+':''}${change.toFixed(2)}%`;
-    return `<p><strong>${p.name}</strong>: Current=${p.curr.toLocaleString()}, Previous=${p.prev.toLocaleString()}, Change=${changeDisplay}</p>`;
-  }).join('');
-  overlay.classList.add("visible");
-}
-
-function closeOverlay() {
-  selectedPlayers=[];
-  document.querySelectorAll("#playerTable tr").forEach(tr=>tr.classList.remove('selected'));
-  document.getElementById("compareOverlay").classList.remove("visible");
-}
+document.getElementById('closeOverlay').onclick = ()=> overlay.style.display='none';
 </script>
 </body>
 </html>
