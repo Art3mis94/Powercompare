@@ -2,43 +2,34 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Player Dashboard — Power Compare</title>
+<title>Power Dashboard</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
 <style>
-body { font-family: Inter, sans-serif; margin:0; background:#f8fafc; color:#1e293b; }
-header { background:#1e40af; color:#fff; padding:1rem 1.5rem; display:flex; justify-content:space-between; align-items:center; }
-header h1 { margin:0; font-size:1.25rem; }
-nav { display:flex; justify-content:center; gap:10px; padding:0.75rem; background:#e2e8f0; }
-nav a { color:#fff; text-decoration:none; padding:.6rem 1rem; background:#3b82f6; border-radius:6px; font-weight:600; }
-nav a:hover { opacity:.9; transform:translateY(-1px); }
-main { max-width:900px; margin:1.25rem auto; padding:0 1rem; }
-table { width:100%; border-collapse:collapse; margin-top:1rem; }
-th, td { padding:.6rem .8rem; text-align:left; border-bottom:1px solid #ccc; }
-th { background:#e2e8f0; }
-td.percent { text-align:right; }
-.top { font-weight:700; color:#059669; }
-.selected { background:#fef3c7 !important; }
-.overlay {
-  display:none; position:fixed; top:0; left:0; width:100%; height:100%;
-  background:rgba(0,0,0,0.6); justify-content:center; align-items:center;
-}
-.overlay .content {
-  background:#fff; padding:2rem; border-radius:12px; max-width:500px; width:90%;
-}
-button.closeOverlay {
-  background:#ef4444; color:#fff; border:none; padding:.5rem 1rem;
-  border-radius:8px; cursor:pointer; float:right;
-}
+body{font-family:Inter,sans-serif;background:#f8fafc;color:#1e293b;margin:0;}
+header{background:#1e40af;color:#fff;padding:1rem 1.5rem;display:flex;justify-content:space-between;align-items:center;}
+header h1{margin:0;font-size:1.5rem;}
+nav{display:flex;justify-content:center;gap:10px;padding:.75rem;background:#e2e8f0;}
+nav a{background:#3b82f6;color:#fff;padding:.6rem 1rem;border-radius:6px;text-decoration:none;font-weight:600;}
+nav a:hover{opacity:.9;transform:translateY(-1px);}
+main{max-width:900px;margin:1.5rem auto;padding:0 1rem;}
+table{width:100%;border-collapse:collapse;margin-top:1rem;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 6px 20px rgba(2,6,23,0.04);}
+th,td{padding:.6rem .8rem;text-align:left;border-bottom:1px solid #ccc;}
+th{background:#e2e8f0;}
+td.number{text-align:right;}
+.top{font-weight:700;color:#059669;}
 </style>
 </head>
 <body>
+
 <header>
-  <h1>Player Dashboard</h1>
+  <h1>Power Dashboard</h1>
 </header>
 
 <nav>
-  <a href="power.html">Add/Manage Power</a>
+  <a href="power.html">Add / Edit Power</a>
   <a href="compare.html">Compare</a>
 </nav>
 
@@ -47,161 +38,79 @@ button.closeOverlay {
     <thead>
       <tr>
         <th>Player</th>
-        <th>Previous Power</th>
         <th>Current Power</th>
+        <th>Previous Power</th>
         <th>% Change</th>
-        <th>% Relative to Top</th>
+        <th>% vs Top</th>
       </tr>
     </thead>
     <tbody></tbody>
   </table>
 </main>
 
-<div class="overlay" id="compareOverlay">
-  <div class="content">
-    <button class="closeOverlay" id="closeOverlay">Close</button>
-    <h2>Comparison</h2>
-    <table id="compareTable">
-      <thead>
-        <tr>
-          <th>Player</th>
-          <th>Current Power</th>
-          <th>% Change</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
-  </div>
-</div>
-
-<!-- Firebase SDK -->
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-
 <script>
 const firebaseConfig = {
   apiKey: "AIzaSyAyhGftf_DfotmvL4iLx60NT98BjkbG6DM",
   authDomain: "powercompare-bafd9.firebaseapp.com",
   projectId: "powercompare-bafd9",
-  storageBucket: "powercompare-bafd9.firebasestorage.app",
+  storageBucket: "powercompare-bafd9.appspot.com",
   messagingSenderId: "768897803088",
   appId: "1:768897803088:web:ff55aed87037cef6720255",
   measurementId: "G-09ENH5L0VG"
 };
 
 firebase.initializeApp(firebaseConfig);
-const auth = firebase.auth();
 const db = firebase.firestore();
 
-// Redirect if not signed in
-auth.onAuthStateChanged(user => {
-  if(!user) window.location.href = "login.html";
-});
+function formatNumber(n){ return n.toLocaleString(); }
+function formatPercent(n){ return n.toFixed(2)+'%'; }
 
-// Format number with commas
-function numberWithCommas(x) {
-  return x.toLocaleString();
-}
+function loadDashboard(){
+  db.collection('powerData').orderBy('date','asc').get().then(snapshot=>{
+    const players = {};
+    snapshot.forEach(doc=>{
+      const data = doc.data();
+      if(!players[data.name]) players[data.name]=[];
+      players[data.name].push(data);
+    });
 
-// Load players from Firebase
-async function loadData() {
-  const snapshot = await db.collection('powerData').orderBy('date', 'asc').get();
-  const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-  return data;
-}
+    // Determine top power
+    let topPower = 0;
+    for(const p in players){
+      const latest = players[p][players[p].length-1];
+      if(latest.power>topPower) topPower=latest.power;
+    }
 
-// Build main table
-async function renderTable() {
-  const data = await loadData();
-  const tableBody = document.querySelector('#playerTable tbody');
-  tableBody.innerHTML = '';
+    // Build table rows
+    const rows = [];
+    for(const p in players){
+      const entries = players[p];
+      const latest = entries[entries.length-1];
+      const prev = entries.length>1 ? entries[entries.length-2] : null;
+      const change = prev ? ((latest.power - prev.power)/prev.power*100) : 0;
+      const relative = topPower ? (latest.power/topPower*100) : 0;
+      rows.push(`
+        <tr>
+          <td>${p}</td>
+          <td class="number">${formatNumber(latest.power)}</td>
+          <td class="number">${prev ? formatNumber(prev.power) : '-'}</td>
+          <td class="number">${change>=0?'+':''}${formatPercent(change)}</td>
+          <td class="number">${formatPercent(relative)}</td>
+        </tr>
+      `);
+    }
 
-  if(!data.length){
-    tableBody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#555">No entries yet</td></tr>';
-    return;
-  }
-
-  const players = {};
-  data.forEach(d => {
-    if(!players[d.name]) players[d.name] = [];
-    players[d.name].push(d);
-  });
-
-  const rows = [];
-  let topPower = 0;
-
-  // Sort by date and get latest power
-  for(const name in players){
-    players[name].sort((a,b)=>new Date(a.date)-new Date(b.date));
-    const latest = players[name][players[name].length-1];
-    if(latest.power>topPower) topPower=latest.power;
-  }
-
-  for(const name in players){
-    const entries = players[name];
-    const latest = entries[entries.length-1];
-    const prev = entries.length>1 ? entries[entries.length-2] : {power:0};
-    const change = prev.power ? ((latest.power - prev.power)/prev.power*100) : 0;
-    const relative = topPower ? (latest.power / topPower*100) : 0;
-
-    rows.push({name, prev:prev.power, curr:latest.power, change, relative});
-  }
-
-  // Sort descending by current power
-  rows.sort((a,b)=>b.curr - a.curr);
-
-  rows.forEach(r=>{
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${r.name}</td>
-      <td>${numberWithCommas(r.prev)}</td>
-      <td>${numberWithCommas(r.curr)}</td>
-      <td class="percent">${r.change>=0?'+':''}${r.change.toFixed(2)}%</td>
-      <td class="percent">${r.relative.toFixed(2)}%</td>
-    `;
-    tr.addEventListener('click', ()=> selectPlayer(r));
-    tableBody.appendChild(tr);
+    document.querySelector('#playerTable tbody').innerHTML =
+      rows.sort((a,b)=>{
+        const pa=parseInt(a.match(/<td class="number">([\d,]+)/)[1].replace(/,/g,''),10);
+        const pb=parseInt(b.match(/<td class="number">([\d,]+)/)[1].replace(/,/g,''),10);
+        return pb-pa;
+      }).join('');
   });
 }
 
-// Comparison overlay logic
-const selectedPlayers = [];
-function selectPlayer(player){
-  if(selectedPlayers.find(p=>p.name===player.name)){
-    selectedPlayers.splice(selectedPlayers.findIndex(p=>p.name===player.name),1);
-  } else {
-    selectedPlayers.push(player);
-  }
-
-  if(selectedPlayers.length>=2){
-    showOverlay();
-  }
-}
-
-function showOverlay(){
-  const overlay = document.getElementById('compareOverlay');
-  const tbody = document.querySelector('#compareTable tbody');
-  tbody.innerHTML = '';
-  selectedPlayers.forEach(p=>{
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${p.name}</td>
-      <td>${numberWithCommas(p.curr)}</td>
-      <td>${p.change>=0?'+':''}${p.change.toFixed(2)}%</td>
-    `;
-    tbody.appendChild(tr);
-  });
-  overlay.style.display='flex';
-}
-
-document.getElementById('closeOverlay').addEventListener('click', ()=>{
-  document.getElementById('compareOverlay').style.display='none';
-  selectedPlayers.length=0;
-});
-
-// Init
-renderTable();
+loadDashboard();
 </script>
+
 </body>
 </html>
