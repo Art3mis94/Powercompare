@@ -29,26 +29,9 @@ main{max-width:1200px;margin:1.5rem auto;padding:0 1rem;}
 .filter-group button#chartBtn{background:#f59e0b;}
 .filter-group button:hover{opacity: 0.9;}
 .filter-group button#resetBtn{background:#6b7280;}
-#chartContainer{
-    position: relative;
-    height: 450px; 
-    width: 100%;
-    margin-top: 1rem;
-    padding: 1rem;
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    background: #fdfdfe;
-}
-#overlay{
-  position:fixed;top:0;left:0;width:100%;height:100%;
-  background:rgba(0,0,0,0.5);display:none;align-items:center;justify-content:center;
-  z-index:1000;
-}
-#overlay > div{
-    max-width: 90%;
-    max-height: 90%;
-    overflow: auto;
-}
+#chartContainer{position: relative;height: 450px;width: 100%;margin-top: 1rem;padding: 1rem;border: 1px solid #e2e8f0;border-radius: 8px;background: #fdfdfe;}
+#overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);display:none;align-items:center;justify-content:center;z-index:1000;}
+#overlay > div{max-width: 90%;max-height: 90%;overflow: auto;}
 #overlay table{background:#fff;color:#1e293b;border-collapse:collapse;border-radius:8px;overflow:hidden;min-width:400px;box-shadow: 0 4px 15px rgba(0,0,0,0.2);}
 #overlay th, #overlay td{padding:.8rem 1.2rem;border-bottom:1px solid #eee;text-align:center;}
 #overlay th{background:#1e40af;color:#fff;position: sticky; top: 0; cursor: pointer;}
@@ -75,7 +58,6 @@ main{max-width:1200px;margin:1.5rem auto;padding:0 1rem;}
 <section class="section">
   <h2>Comparison Setup</h2>
   <div class="controls">
-    
     <div class="filter-group">
       <label for="playerSelect">Players (Select multiple)</label>
       <select id="playerSelect" multiple size="8"></select>
@@ -114,382 +96,188 @@ main{max-width:1200px;margin:1.5rem auto;padding:0 1rem;}
 </div>
 
 <script>
-    // ⚠️ FIREBASE CONFIG AND INITIALIZATION ⚠️
-    const firebaseConfig = {
-      apiKey: "AIzaSyAyhGftf_DfotmvL4iLx60NT98BjkbG6DM",
-      authDomain: "powercompare-bafd9.firebaseapp.com",
-      projectId: "powercompare-bafd9",
-      storageBucket: "powercompare-bafd9.firebasestorage.app",
-      messagingSenderId: "768897803088",
-      appId: "1:768897803088:web:ff55aed87037cef6720255",
-      measurementId: "G-09ENH5L0VG"
-    };
-    firebase.initializeApp(firebaseConfig);
-    const auth = firebase.auth();
-    const db = firebase.firestore();
+const firebaseConfig = {
+  apiKey: "AIzaSyAyhGftf_DfotmvL4iLx60NT98BjkbG6DM",
+  authDomain: "powercompare-bafd9.firebaseapp.com",
+  projectId: "powercompare-bafd9",
+  storageBucket: "powercompare-bafd9.firebasestorage.app",
+  messagingSenderId: "768897803088",
+  appId: "1:768897803088:web:ff55aed87037cef6720255",
+  measurementId: "G-09ENH5L0VG"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
 
-    // Global variables
-    let allPlayerEntries = {}; 
-    let comparisonData = []; // Data array for the sortable summary table
-    let powerTrendChart;
-    let currentUserUid = null; 
-    const playerColors={};
-    const chartStatus = document.getElementById('chartStatus');
-    const powerChartCanvas = document.getElementById('powerChart');
+let currentUserUid = null;
+let allPlayerEntries = {};
+let comparisonData = [];
+let powerTrendChart;
+const playerColors = {};
+const chartStatus = document.getElementById('chartStatus');
+const powerChartCanvas = document.getElementById('powerChart');
 
-    // Utility function to format numbers with commas
-    const formatNumber = (num, isPercent = false) => {
-        if (num === null || isNaN(num)) return 'N/A';
-        if (isPercent) {
-            return num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-        }
-        return Math.round(num).toLocaleString();
-    };
+// Utility to format numbers
+const formatNumber = (num, isPercent=false) => {
+    if(num===null||isNaN(num)) return 'N/A';
+    return isPercent ? num.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) : Math.round(num).toLocaleString();
+};
+const getRandomColor=()=>`rgb(${Math.floor(Math.random()*200)},${Math.floor(Math.random()*200)},${Math.floor(Math.random()*200)})`;
 
-    function getRandomColor(){const r=Math.floor(Math.random()*200),g=Math.floor(Math.random()*200),b=Math.floor(Math.random()*200); return `rgb(${r},${g},${b})`; }
+// Auth check
+auth.onAuthStateChanged(user=>{
+    if(!user) location.href="login.html";
+    else{
+        currentUserUid = user.uid;
+        loadAllPlayerEntries();
+    }
+});
+document.getElementById("signOutBtn").onclick = ()=> auth.signOut().then(()=>location.href="login.html");
 
-    // ⚠️ AUTH CHECK AND LOADING CALL ⚠️
-    auth.onAuthStateChanged(user=>{
-        if(!user) {
-            location.href="login.html";
-        } else {
-            currentUserUid = user.uid;
-            loadAllPlayerEntries();
-        }
+// Load all entries in real-time
+async function loadAllPlayerEntries(){
+    chartStatus.textContent = 'Loading player data...';
+    if(!currentUserUid) return;
+    const snapshot = await db.collection('powers').doc(currentUserUid).collection('entries')
+                            .orderBy('player').orderBy('date').get();
+    const players = {};
+    const playerNames = new Set();
+    snapshot.forEach(doc=>{
+        const data=doc.data();
+        const date = data.date?.substring(0,10) || new Date().toISOString().substring(0,10);
+        playerNames.add(data.player);
+        if(!players[data.player]) players[data.player]=[];
+        players[data.player].push({power:data.power,date,id:doc.id});
     });
+    allPlayerEntries=players;
+    populatePlayers(Array.from(playerNames).sort());
+    chartStatus.textContent='Select players and click "Generate Chart" or "Summary Table".';
+}
 
-    // Sign out
-    document.getElementById("signOutBtn").onclick = ()=> auth.signOut().then(()=>location.href="login.html");
-
-
-    /**
-     * Loads all entries from the CORRECTED Firebase path, groups them by player, and sorts them by date.
-     */
-    async function loadAllPlayerEntries(){
-        chartStatus.textContent = 'Loading player data...';
-        if (!currentUserUid) return; 
-
-        // 💡 Uses the corrected path: powers > uid > entries
-        const snapshot = await db.collection('powers').doc(currentUserUid).collection('entries')
-                                 .orderBy('player', 'asc').orderBy('date', 'asc').get();
-        
-        const players = {};
-        const playerNames = new Set();
-        
-        snapshot.forEach(doc => {
-            const data = doc.data();
-            // Ensure date is consistent (YYYY-MM-DD)
-            const date = data.date ? data.date.substring(0, 10) : new Date().toISOString().substring(0, 10); 
-            
-            playerNames.add(data.player);
-            if (!players[data.player]) players[data.player] = [];
-            players[data.player].push({
-                power: data.power,
-                date: date,
-                id: doc.id
-            });
-        });
-
-        allPlayerEntries = players;
-        populatePlayers(Array.from(playerNames).sort());
-        chartStatus.textContent = 'Select players and click "Generate Chart" or "Summary Table".';
+function populatePlayers(playerNames){
+    const select=document.getElementById('playerSelect');
+    if(playerNames.length===0){
+        select.innerHTML='<option disabled>No players found</option>';
+        document.getElementById('chartBtn').disabled=true;
+        document.getElementById('compareBtn').disabled=true;
+        return;
     }
+    select.innerHTML=playerNames.map(p=>`<option value="${p}">${p}</option>`).join('');
+    document.getElementById('chartBtn').disabled=false;
+    document.getElementById('compareBtn').disabled=false;
+}
 
-    /**
-     * Populates the player select element from the loaded data.
-     */
-    function populatePlayers(playerNames){
-        const select = document.getElementById('playerSelect');
-        
-        if (playerNames.length === 0) {
-            select.innerHTML = '<option disabled>No players found</option>';
-            document.getElementById('chartBtn').disabled = true;
-            document.getElementById('compareBtn').disabled = true;
-            return;
-        }
-        
-        select.innerHTML = playerNames.map(p => `<option value="${p}">${p}</option>`).join('');
-        document.getElementById('chartBtn').disabled = false;
-        document.getElementById('compareBtn').disabled = false;
-    }
+function showOverlay(){
+    const selectedNames=[...document.getElementById('playerSelect').options].filter(o=>o.selected).map(o=>o.value);
+    if(selectedNames.length<2){ alert('Select at least 2 players to compare.'); return; }
+    comparisonData=[];
+    selectedNames.forEach(name=>{
+        const entries = allPlayerEntries[name];
+        if(!entries||entries.length===0) return;
+        const uniqueDates=[...new Set(entries.map(e=>e.date))].sort();
+        const latestDate=uniqueDates[uniqueDates.length-1];
+        const previousDate=uniqueDates.length>1?uniqueDates[uniqueDates.length-2]:null;
+        const latestPower = Math.max(...entries.filter(e=>e.date===latestDate).map(e=>e.power));
+        let previousPower=null;
+        if(previousDate) previousPower=Math.max(...entries.filter(e=>e.date===previousDate).map(e=>e.power));
+        const change = (previousPower && previousPower>0)?((latestPower-previousPower)/previousPower*100):(previousPower===0&&latestPower>0?Infinity:0);
+        comparisonData.push({name,currentPower:latestPower,previousPower,change:parseFloat(change.toFixed(2))});
+    });
+    renderComparisonTable();
+    document.getElementById('overlay').style.display='flex';
+}
 
-    /**
-     * Generates and shows the summary comparison data in the overlay table.
-     */
-    function showOverlay(){
-        const selectedNames = [...document.getElementById('playerSelect').options]
-                               .filter(o => o.selected)
-                               .map(o => o.value);
-        
-        if(selectedNames.length < 2){ 
-            alert('Select at least 2 players to compare in the Summary Table.'); 
-            return; 
-        }
-
-        comparisonData = [];
-
-        selectedNames.forEach(name => {
-            const entries = allPlayerEntries[name];
-            if(!entries || entries.length === 0) return;
-            
-            // Find the latest unique date and the previous unique date
-            const uniqueDates = [...new Set(entries.map(e => e.date))].sort();
-            
-            const latestDate = uniqueDates[uniqueDates.length - 1];
-            const previousDate = uniqueDates.length > 1 ? uniqueDates[uniqueDates.length - 2] : null;
-
-            // Get the highest power for the latest date (in case of multiple entries on the same day)
-            const latestPower = Math.max(...entries.filter(e => e.date === latestDate).map(e => e.power));
-            
-            let previousPower = null;
-            if (previousDate) {
-                 previousPower = Math.max(...entries.filter(e => e.date === previousDate).map(e => e.power));
-            }
-
-            const change = (previousPower && previousPower > 0) ? 
-                           ((latestPower - previousPower) / previousPower * 100) : 
-                           (previousPower === 0 && latestPower > 0 ? Infinity : 0); // Handle division by zero
-
-            comparisonData.push({ 
-                name, 
-                currentPower: latestPower, 
-                previousPower: previousPower, 
-                change: parseFloat(change.toFixed(2)) 
-            });
-        });
-
-        renderComparisonTable();
-        document.getElementById('overlay').style.display = 'flex';
-    }
-    
-    /**
-     * Renders the HTML table based on the current comparisonData array.
-     * @param {string} sortBy - The field to sort by ('currentPower' or 'change').
-     * @param {boolean} ascending - True for ascending, False for descending.
-     */
-    function renderComparisonTable(sortBy = 'currentPower', ascending = false) {
-        const table = document.getElementById('compareTable');
-        
-        // Sorting logic
-        comparisonData.sort((a, b) => {
-            const valA = a[sortBy];
-            const valB = b[sortBy];
-            let comparison = 0;
-            if (valA > valB) comparison = 1;
-            else if (valA < valB) comparison = -1;
-            return ascending ? comparison : (comparison * -1);
-        });
-        
-        // Build table headers with sorting links
-        table.innerHTML = `
+let currentSort={field:'currentPower',asc:false};
+function renderComparisonTable(sortBy=currentSort.field,ascending=currentSort.asc){
+    const table=document.getElementById('compareTable');
+    comparisonData.sort((a,b)=>{
+        let valA=a[sortBy],valB=b[sortBy],comparison=0;
+        if(valA>valB) comparison=1; else if(valA<valB) comparison=-1;
+        return ascending?comparison:-comparison;
+    });
+    table.innerHTML=`
+        <tr>
+            <th onclick="sortTable('name')">Player</th>
+            <th onclick="sortTable('currentPower')">Current Power ${sortBy==='currentPower'? (ascending?'▲':'▼') : ''}</th>
+            <th>Previous Power</th>
+            <th onclick="sortTable('change')">% Change ${sortBy==='change'? (ascending?'▲':'▼') : ''}</th>
+        </tr>
+    `;
+    comparisonData.forEach(r=>{
+        const changeVal=r.change===Infinity?'+∞':`${r.change>=0?'+':''}${formatNumber(r.change,true)}%`;
+        const changeClass=r.change>0?'positive':(r.change<0?'negative':'');
+        table.innerHTML+=`
             <tr>
-                <th onclick="sortTable('name')" class="sortable">Player</th>
-                <th onclick="sortTable('currentPower')" class="sortable">Current Power ${sortBy === 'currentPower' ? (ascending ? '▲' : '▼') : ''}</th>
-                <th>Previous Power</th>
-                <th onclick="sortTable('change')" class="sortable">% Change ${sortBy === 'change' ? (ascending ? '▲' : '▼') : ''}</th>
+                <td>${r.name}</td>
+                <td class="power-val">${formatNumber(r.currentPower)}</td>
+                <td>${formatNumber(r.previousPower)}</td>
+                <td class="${changeClass}">${changeVal}</td>
             </tr>
         `;
-        
-        // Generate table rows
-        comparisonData.forEach(r => {
-            const changeVal = r.change === Infinity ? '+∞' : `${r.change >= 0 ? '+' : ''}${formatNumber(r.change, true)}%`;
-            const changeClass = r.change > 0 ? 'positive' : (r.change < 0 ? 'negative' : '');
-            
-            table.innerHTML += `
-                <tr>
-                    <td>${r.name}</td>
-                    <td class="power-val">${formatNumber(r.currentPower)}</td>
-                    <td>${formatNumber(r.previousPower)}</td>
-                    <td class="${changeClass}">${changeVal}</td>
-                </tr>
-            `;
+    });
+}
+window.sortTable=(field)=>{
+    if(currentSort.field===field) currentSort.asc=!currentSort.asc;
+    else { currentSort.field=field; currentSort.asc=false; }
+    renderComparisonTable(currentSort.field,currentSort.asc);
+};
+
+function generateChart(){
+    const selectedNames=[...document.getElementById('playerSelect').options].filter(o=>o.selected).map(o=>o.value);
+    const method=document.getElementById('comparisonMethod').value;
+    if(selectedNames.length===0){ chartStatus.textContent='Select at least one player.'; powerChartCanvas.style.display='none'; return; }
+    if(powerTrendChart) powerTrendChart.destroy();
+    let allDates=new Set();
+    selectedNames.forEach(name=>{
+        const entries=allPlayerEntries[name]||[];
+        entries.forEach(e=>allDates.add(e.date));
+    });
+    const sortedDates=Array.from(allDates).sort();
+    const datasets=selectedNames.map(player=>{
+        const entries=allPlayerEntries[player]||[];
+        if(!playerColors[player]) playerColors[player]=getRandomColor();
+        const datePowerMap=new Map();
+        entries.forEach(entry=>{
+            const existing=datePowerMap.get(entry.date)||0;
+            datePowerMap.set(entry.date,Math.max(existing,entry.power));
         });
+        const rawData=sortedDates.map(d=>datePowerMap.get(d)??null);
+        const finalData=(method==='rawPower')?rawData:calculatePercentChangeSeries(rawData);
+        return {label:player,data:finalData,borderColor:playerColors[player],backgroundColor:playerColors[player].replace('rgb','rgba').replace(')',',0.5)'),spanGaps:true,tension:0.2,borderWidth:2,pointRadius:4};
+    }).filter(d=>d.data.some(v=>v!==null));
+    const ctx=powerChartCanvas.getContext('2d');
+    const chartTitle=(method==='rawPower')?'Raw Power Trend':'Percent Change Trend';
+    const yAxisLabel=(method==='rawPower')?'Total Power':'% Change';
+    const tooltipCallback={label:ctx=>{let l=ctx.dataset.label||''; if(l) l+=':'; if(ctx.parsed.y!==null) l+=method==='rawPower'?formatNumber(ctx.parsed.y):`${ctx.parsed.y>0?'+':''}${formatNumber(ctx.parsed.y,true)}%`; return l;}};
+    powerTrendChart=new Chart(ctx,{type:'line',data:{labels:sortedDates,datasets:datasets},options:{responsive:true,maintainAspectRatio:false,plugins:{title:{display:true,text:chartTitle,font:{size:16}},tooltip:{callbacks:tooltipCallback}},scales:{x:{title:{display:true,text:'Date'},type:'category'},y:{title:{display:true,text:yAxisLabel},beginAtZero:method==='percentChange',ticks:{callback:(value)=>method==='rawPower'?formatNumber(value):value+'%'}}}}});
+    chartStatus.style.display='none';
+    powerChartCanvas.style.display='block';
+}
+
+function calculatePercentChangeSeries(raw){
+    const percent=[];
+    for(let i=0;i<raw.length;i++){
+        const current=raw[i];
+        if(current===null){percent.push(null);continue;}
+        let previous=null,last=i-1;
+        while(last>=0){if(raw[last]!==null){previous=raw[last];break;}last--;}
+        if(previous===null) percent.push(null);
+        else if(previous===0) percent.push(current>0?10000:0);
+        else percent.push(parseFloat(((current-previous)/previous*100).toFixed(2)));
     }
+    return percent;
+}
 
-    let currentSort = { field: 'currentPower', asc: false };
-
-    // Function called by header clicks
-    window.sortTable = (field) => {
-        if (currentSort.field === field) {
-            currentSort.asc = !currentSort.asc;
-        } else {
-            currentSort.field = field;
-            currentSort.asc = false; // Default to descending for new sort field
-        }
-        renderComparisonTable(currentSort.field, currentSort.asc);
-    }
-    
-    /**
-     * Prepares data and generates the Chart.js trend chart.
-     */
-    function generateChart(){
-        const selectedNames = [...document.getElementById('playerSelect').options]
-                               .filter(o => o.selected)
-                               .map(o => o.value);
-        const method = document.getElementById('comparisonMethod').value;
-
-        if(selectedNames.length === 0){ 
-            chartStatus.textContent = 'Please select at least one player to generate a chart.';
-            powerChartCanvas.style.display = 'none';
-            return; 
-        }
-        
-        if (powerTrendChart) powerTrendChart.destroy();
-        
-        // --- Data Preparation ---
-        let allDates = new Set();
-        
-        selectedNames.forEach(name => {
-            const entries = allPlayerEntries[name];
-            if(entries && entries.length > 0) {
-                entries.forEach(entry => allDates.add(entry.date));
-            }
-        });
-
-        const sortedDates = Array.from(allDates).sort();
-
-        const datasets = selectedNames.map(player => {
-            const entries = allPlayerEntries[player] || [];
-            if (!playerColors[player]) playerColors[player] = getRandomColor();
-
-            // Create a dense array of the latest power for each unique date
-            const datePowerMap = new Map();
-            entries.forEach(entry => {
-                const existingPower = datePowerMap.get(entry.date) || 0;
-                // Take the maximum power recorded for that date
-                datePowerMap.set(entry.date, Math.max(existingPower, entry.power));
-            });
-
-            const rawDataPoints = sortedDates.map(dateKey => datePowerMap.get(dateKey) ?? null);
-
-            const finalData = (method === 'rawPower') ? rawDataPoints : calculatePercentChangeSeries(rawDataPoints);
-
-            return {
-                label: player,
-                data: finalData,
-                borderColor: playerColors[player],
-                backgroundColor: playerColors[player].replace('rgb', 'rgba').replace(')', ', 0.5)'),
-                spanGaps: true, 
-                tension: 0.2,
-                borderWidth: 2,
-                pointRadius: 4
-            };
-        }).filter(d => d.data.some(v => v !== null)); 
-
-        // --- Chart Configuration ---
-        let chartTitle, yAxisLabel, tooltipCallback;
-
-        if (method === 'rawPower') {
-            chartTitle = 'Raw Power Trend';
-            yAxisLabel = 'Total Power';
-            tooltipCallback = {
-                label: (context) => {
-                    let label = context.dataset.label || '';
-                    if (label) label += ': ';
-                    if (context.parsed.y !== null) label += formatNumber(context.parsed.y);
-                    return label;
-                }
-            };
-        } else { 
-            chartTitle = 'Percent Change Trend';
-            yAxisLabel = '% Change';
-            tooltipCallback = {
-                label: (context) => {
-                    let label = context.dataset.label || '';
-                    if (label) label += ': ';
-                    if (context.parsed.y !== null) label += `${context.parsed.y > 0 ? '+' : ''}${formatNumber(context.parsed.y, true)}%`;
-                    return label;
-                }
-            };
-        }
-
-        const ctx = powerChartCanvas.getContext('2d');
-        powerTrendChart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: sortedDates,
-                datasets: datasets
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    title: { display: true, text: chartTitle, font: { size: 16 } },
-                    tooltip: { callbacks: tooltipCallback }
-                },
-                scales: {
-                    x: { 
-                        title: { display: true, text: 'Date' },
-                        type: 'category' 
-                    },
-                    y: {
-                        title: { display: true, text: yAxisLabel },
-                        beginAtZero: method === 'percentChange',
-                        ticks: {
-                            callback: function(value, index, ticks) {
-                                if (method === 'rawPower') return formatNumber(value);
-                                return value + '%';
-                            }
-                        }
-                    }
-                }
-            }
-        });
-        
-        chartStatus.style.display = 'none';
-        powerChartCanvas.style.display = 'block';
-    }
-
-    /**
-     * Helper function to convert a raw power series into a percent change series.
-     */
-    function calculatePercentChangeSeries(rawPowerData) {
-        const percentChange = []; // Initialize with an empty array
-        
-        for (let i = 0; i < rawPowerData.length; i++) {
-            const current = rawPowerData[i];
-            
-            if (current === null) {
-                percentChange.push(null);
-                continue;
-            }
-
-            // Find the last valid power entry before the current one
-            let previous = null;
-            let lastValidIndex = i - 1;
-            while(lastValidIndex >= 0) {
-                if (rawPowerData[lastValidIndex] !== null) {
-                    previous = rawPowerData[lastValidIndex];
-                    break;
-                }
-                lastValidIndex--;
-            }
-            
-            if (previous === null) {
-                percentChange.push(null); // No previous data point
-            } else if (previous === 0) {
-                // Large positive change if power went from 0 to something
-                percentChange.push(current > 0 ? 10000 : 0); 
-            } else {
-                const change = ((current - previous) / previous) * 100;
-                percentChange.push(parseFloat(change.toFixed(2)));
-            }
-        }
-        return percentChange;
-    }
-
-
-    // Event listeners
-    document.getElementById('compareBtn').onclick = showOverlay; 
-    document.getElementById('chartBtn').onclick = generateChart; 
-    document.getElementById('resetBtn').onclick = ()=>{
-        [...document.getElementById('playerSelect').options].forEach(o=>o.selected=false);
-        if(powerTrendChart) powerTrendChart.destroy();
-        powerChartCanvas.style.display = 'none';
-        chartStatus.style.display = 'block';
-        chartStatus.textContent = 'Select players and click "Generate Chart" or "Summary Table".';
-    };
-    document.getElementById('closeOverlay').onclick = ()=>document.getElementById('overlay').style.display='none';
+document.getElementById('compareBtn').onclick=showOverlay;
+document.getElementById('chartBtn').onclick=generateChart;
+document.getElementById('resetBtn').onclick=()=>{
+    [...document.getElementById('playerSelect').options].forEach(o=>o.selected=false);
+    if(powerTrendChart) powerTrendChart.destroy();
+    powerChartCanvas.style.display='none';
+    chartStatus.style.display='block';
+    chartStatus.textContent='Select players and click "Generate Chart" or "Summary Table".';
+};
+document.getElementById('closeOverlay').onclick=()=>document.getElementById('overlay').style.display='none';
 </script>
 </body>
 </html>
