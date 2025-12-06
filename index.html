@@ -5,27 +5,34 @@
 <title>Player Dashboard</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
 <style>
-body { font-family: Inter, sans-serif; margin:0; background:#f8fafc; color:#1e293b; }
-header { background:#1e40af; color:#fff; padding:1rem 1.5rem; display:flex; justify-content:space-between; align-items:center; }
-header h1 { margin:0; font-size:1.25rem; }
-header button { background:#ef4444; color:#fff; border:none; padding:.5rem 1rem; border-radius:6px; cursor:pointer; font-weight:600; }
-
-nav { display:flex; justify-content:center; gap:10px; padding:.75rem; background:#e2e8f0; }
-nav a { background:#3b82f6; color:#fff; text-decoration:none; padding:.6rem 1rem; border-radius:6px; font-weight:600; }
-nav a:hover { opacity:.9; transform:translateY(-1px); }
-
-main { max-width:900px; margin:1.25rem auto; padding:0 1rem; }
-table { width:100%; border-collapse:collapse; margin-top:1rem; }
-th, td { padding:.6rem .8rem; text-align:left; border-bottom:1px solid #ccc; }
-th { background:#e2e8f0; }
-td.percent, td.prev { text-align:right; }
-.top { font-weight:700; color:#059669; }
-.selected { background:#fde68a; }
+body{font-family:Inter,sans-serif;margin:0;background:#f8fafc;color:#1e293b;}
+header{background:#1e40af;color:#fff;padding:1rem 1.5rem;display:flex;justify-content:space-between;align-items:center;}
+header h1{margin:0;font-size:1.25rem;}
+button{padding:.5rem 1rem;border-radius:6px;border:none;background:#3b82f6;color:#fff;cursor:pointer;}
+button:hover{opacity:.9;}
+nav{display:flex;justify-content:center;gap:10px;padding:.75rem;background:#e2e8f0;}
+nav a{background:#3b82f6;color:#fff;padding:.6rem 1rem;border-radius:6px;text-decoration:none;font-weight:600;}
+nav a:hover{opacity:.9;}
+main{max-width:900px;margin:1.5rem auto;padding:0 1rem;}
+table{width:100%;border-collapse:collapse;margin-top:1rem;}
+th,td{padding:.6rem;border-bottom:1px solid #ccc;text-align:left;}
+td.percent{text-align:right;}
+tr.selected{background:rgba(59,130,246,0.2);}
+.overlay{
+  position:fixed;top:0;left:0;width:100%;height:100%;
+  background:rgba(0,0,0,0.5);display:flex;justify-content:center;align-items:center;
+  visibility:hidden;opacity:0;transition:opacity .3s;
+}
+.overlay .content{
+  background:#fff;padding:1.5rem;border-radius:12px;max-width:500px;width:90%;
+}
+.overlay.visible{visibility:visible;opacity:1;}
 </style>
-<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
 </head>
 <body>
 
@@ -35,8 +42,8 @@ td.percent, td.prev { text-align:right; }
 </header>
 
 <nav>
-  <a href="compare.html">Compare</a>
-  <a href="power.html">Add Power</a>
+  <a href="power.html">Add / Edit Power</a>
+  <a href="compare.html">Compare Players</a>
 </nav>
 
 <main>
@@ -44,19 +51,26 @@ td.percent, td.prev { text-align:right; }
     <thead>
       <tr>
         <th>Player</th>
-        <th>Current Power</th>
         <th>Previous Power</th>
+        <th>Current Power</th>
         <th>% Change</th>
-        <th>% Relative to Top</th>
       </tr>
     </thead>
-    <tbody>
-      <tr><td colspan="5" style="text-align:center;color:#555">Loading...</td></tr>
-    </tbody>
+    <tbody></tbody>
   </table>
 </main>
 
+<!-- Overlay for comparison -->
+<div class="overlay" id="compareOverlay">
+  <div class="content">
+    <h3>Comparison</h3>
+    <div id="comparisonResult"></div>
+    <button onclick="closeOverlay()">Close</button>
+  </div>
+</div>
+
 <script>
+// Firebase config
 const firebaseConfig = {
   apiKey: "AIzaSyAyhGftf_DfotmvL4iLx60NT98BjkbG6DM",
   authDomain: "powercompare-bafd9.firebaseapp.com",
@@ -66,70 +80,80 @@ const firebaseConfig = {
   appId: "1:768897803088:web:ff55aed87037cef6720255",
   measurementId: "G-09ENH5L0VG"
 };
-
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 
 // Redirect if not logged in
 auth.onAuthStateChanged(user=>{
-  if(!user) window.location.href="login.html";
-  else loadTable(user.uid);
+  if(!user) location.href="login.html";
+  else loadPlayers();
 });
 
 // Sign out
-document.getElementById("signOutBtn").addEventListener("click", ()=>{
-  auth.signOut().then(()=>window.location.href="login.html");
-});
+document.getElementById("signOutBtn").onclick = ()=> auth.signOut().then(()=>location.href="login.html");
 
-// Load table from Firebase
-async function loadTable(uid){
-  const snapshot = await db.collection('powers').doc(uid).collection('entries').get();
-  const data = snapshot.docs.map(d=>d.data());
-  
-  const tableBody = document.querySelector('#playerTable tbody');
-  if(!data.length){
-    tableBody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#555">No entries yet</td></tr>';
-    return;
-  }
+let selectedPlayers = [];
 
-  // Group by player
+async function loadPlayers(){
+  const user = auth.currentUser;
+  const snapshot = await db.collection('powers').doc(user.uid).collection('entries')
+                           .orderBy('date','asc').get();
   const players = {};
-  data.forEach(d=>{
+  snapshot.forEach(doc=>{
+    const d = doc.data();
     if(!players[d.name]) players[d.name]=[];
-    players[d.name].push(d);
+    players[d.name].push(d.power);
   });
 
-  let topPower = 0;
-  for(const name in players){
-    players[name].sort((a,b)=>new Date(a.date)-new Date(b.date));
-    const latest = players[name][players[name].length-1];
-    if(latest.power>topPower) topPower = latest.power;
+  const tbody = document.querySelector("#playerTable tbody");
+  tbody.innerHTML = '';
+
+  Object.entries(players).forEach(([name,powers])=>{
+    const prev = powers.length>1 ? powers[powers.length-2] : 0;
+    const curr = powers[powers.length-1];
+    const change = prev ? ((curr-prev)/prev*100) : 0;
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${name}</td>
+      <td>${prev.toLocaleString()}</td>
+      <td>${curr.toLocaleString()}</td>
+      <td class="percent">${change>=0?'+':''}${change.toFixed(2)}%</td>
+    `;
+    tr.onclick = ()=> selectPlayer(tr, name, prev, curr);
+    tbody.appendChild(tr);
+  });
+}
+
+// Click to select for comparison
+function selectPlayer(tr, name, prev, curr){
+  if(selectedPlayers.find(p=>p.name===name)){
+    selectedPlayers = selectedPlayers.filter(p=>p.name!==name);
+    tr.classList.remove('selected');
+  } else {
+    selectedPlayers.push({name, prev, curr});
+    tr.classList.add('selected');
   }
 
-  const rows = [];
-  for(const name in players){
-    const entries = players[name];
-    const latest = entries[entries.length-1];
-    const prev = entries.length>1 ? entries[entries.length-2] : null;
-    const change = prev ? ((latest.power - prev.power)/prev.power*100) : 0;
-    const relative = topPower ? (latest.power/topPower*100) : 0;
-    rows.push(`
-      <tr>
-        <td>${name}</td>
-        <td>${latest.power.toLocaleString()}</td>
-        <td class="prev">${prev ? prev.power.toLocaleString() : '-'}</td>
-        <td class="percent">${change>=0 ? '+' : ''}${change.toFixed(2)}%</td>
-        <td class="percent">${relative.toFixed(2)}%</td>
-      </tr>
-    `);
-  }
+  if(selectedPlayers.length>1) showOverlay();
+}
 
-  tableBody.innerHTML = rows.sort((a,b)=>{
-    const pa = parseInt(a.match(/<td>([\d,]+)<\/td>/)[1].replace(/,/g,''));
-    const pb = parseInt(b.match(/<td>([\d,]+)<\/td>/)[1].replace(/,/g,''));
-    return pb - pa;
+// Show overlay
+function showOverlay(){
+  const overlay = document.getElementById("compareOverlay");
+  const container = document.getElementById("comparisonResult");
+  container.innerHTML = selectedPlayers.map(p=>{
+    return `<p><strong>${p.name}</strong>: Current=${p.curr.toLocaleString()}, Previous=${p.prev.toLocaleString()}, Change=${((p.curr-p.prev)/p.prev*100).toFixed(2)}%</p>`;
   }).join('');
+  overlay.classList.add("visible");
+}
+
+// Close overlay
+function closeOverlay(){
+  selectedPlayers = [];
+  document.querySelectorAll("#playerTable tr").forEach(tr=>tr.classList.remove('selected'));
+  document.getElementById("compareOverlay").classList.remove("visible");
 }
 </script>
 </body>
