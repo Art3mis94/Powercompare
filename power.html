@@ -114,7 +114,6 @@ auth.onAuthStateChanged(user => {
 /** * Loads ALL entries from the correct path, groups them by player, and updates the UI.
  */
 function loadAllEntries() {
-  // 💡 Using the corrected path: /powers/{uid}/entries
   db.collection("powers").doc(uid).collection("entries")
     .orderBy("date", "desc") 
     .onSnapshot(snapshot => {
@@ -177,8 +176,10 @@ function renderEntries() {
   }
   
   entries.forEach(e => {
+    // Ensuring display is robust against strings
+    const powerDisplay = Number(e.power).toLocaleString(); 
     const li = document.createElement("li");
-    li.textContent = `${e.date.substring(0, 10)}: ${Number(e.power).toLocaleString()} Power`;
+    li.textContent = `${e.date.substring(0, 10)}: ${powerDisplay} Power`;
     li.dataset.id = e.id;
     if (selectedEntryId === e.id) li.classList.add("selected");
     entriesList.appendChild(li);
@@ -196,7 +197,7 @@ addPlayerBtn.addEventListener("click", () => {
   db.collection("powers").doc(uid).collection("entries").add({
     player: name,
     date: new Date().toISOString().substring(0, 10),
-    power: 0
+    power: 0 // New player starts at 0 power
   })
   .then(() => {
     playerNameInput.value = "";
@@ -244,8 +245,10 @@ saveEntryBtn.addEventListener("click", () => {
   if (!selectedPlayer) return alert("Select a player");
 
   const date = entryDate.value;
-  const power = Number(entryPower.value);
-  if (!date || isNaN(power) || power < 0) return alert("Enter a valid date and non-negative power value");
+  // 💡 CRITICAL FIX: Ensure power is read as a number, defaulting to 0 if NaN/empty
+  const power = Number(entryPower.value) || 0; 
+  
+  if (!date || power < 0) return alert("Enter a valid date and non-negative power value");
 
   const isoDate = date.substring(0, 10);
   
@@ -256,7 +259,7 @@ saveEntryBtn.addEventListener("click", () => {
     .set({ 
       player: selectedPlayer, 
       date: isoDate, 
-      power: power 
+      power: power // Saving a guaranteed NUMBER here
     })
     .then(() => {
       selectedEntryId = null; 
@@ -285,7 +288,7 @@ entriesList.addEventListener("click", e => {
   const data = allEntriesData[selectedPlayer].find(entry => entry.id === selectedEntryId);
   if (data) {
       entryDate.value = data.date.substring(0, 10);
-      entryPower.value = data.power;
+      entryPower.value = Number(data.power); // Ensure input value is treated as a number
   }
 });
 </script>
