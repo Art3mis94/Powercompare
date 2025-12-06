@@ -2,51 +2,50 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Add Player Power</title>
+<title>Add / Edit Power</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <style>
-body { font-family: Inter, sans-serif; margin:0; background:#f8fafc; color:#1e293b; }
-header { background:#1e40af; color:#fff; padding:1rem 1.5rem; display:flex; justify-content:space-between; align-items:center; }
-header h1 { margin:0; font-size:1.25rem; }
-header button { background:#ef4444; color:#fff; border:none; padding:.5rem 1rem; border-radius:6px; cursor:pointer; font-weight:600; }
-main { max-width:600px; margin:1.25rem auto; padding:0 1rem; }
-form { display:flex; flex-direction:column; gap:1rem; background:#fff; padding:1rem; border-radius:10px; box-shadow:0 4px 15px rgba(0,0,0,.08);}
-input, select { padding:.6rem; border-radius:6px; border:1px solid #ccc; font-size:1rem; }
-button.save { background:#3b82f6; color:#fff; border:none; padding:.6rem; font-weight:600; border-radius:6px; cursor:pointer; }
-button.save:hover { background:#2563eb; }
+body{font-family:Inter,sans-serif;margin:0;padding:0;background:#f8fafc;color:#1e293b;}
+header{background:#1e40af;color:#fff;padding:1rem 1.5rem;display:flex;justify-content:space-between;align-items:center;}
+header h1{margin:0;font-size:1.25rem;}
+main{max-width:700px;margin:2rem auto;padding:1rem;background:#fff;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,0.05);}
+input, select, button{padding:.6rem;margin:.5rem 0;width:100%;border-radius:6px;border:1px solid #ccc;}
+button{background:#3b82f6;color:#fff;border:none;cursor:pointer;}
+button:hover{opacity:.9;}
+table{width:100%;border-collapse:collapse;margin-top:1rem;}
+th, td{padding:.5rem;border-bottom:1px solid #ccc;text-align:left;}
+td.actions button{margin-right:.3rem;}
 </style>
-
-<!-- Firebase SDK -->
-<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
 </head>
 <body>
 
 <header>
-  <h1>Add Player Power</h1>
+  <h1>Add / Edit Power</h1>
   <button id="signOutBtn">Sign Out</button>
 </header>
 
 <main>
-  <form id="powerForm">
-    <label>Player Name (select or type new):</label>
-    <input type="text" id="playerName" placeholder="Enter player name or select from list" list="playerList" required>
-    <datalist id="playerList"></datalist>
+  <h2>New Entry</h2>
+  <input type="text" id="playerName" placeholder="Player Name" />
+  <input type="number" id="playerPower" placeholder="Power" />
+  <input type="date" id="entryDate" />
+  <button id="saveBtn">Save</button>
 
-    <label>Date:</label>
-    <input type="date" id="entryDate" required>
-
-    <label>Power:</label>
-    <input type="number" id="power" required min="0">
-
-    <button type="submit" class="save">Save</button>
-  </form>
+  <h2>Existing Entries</h2>
+  <table id="entriesTable">
+    <thead>
+      <tr><th>Player</th><th>Power</th><th>Date</th><th>Actions</th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
 </main>
 
 <script>
-// Firebase config
+// Your Firebase config
 const firebaseConfig = {
   apiKey: "AIzaSyAyhGftf_DfotmvL4iLx60NT98BjkbG6DM",
   authDomain: "powercompare-bafd9.firebaseapp.com",
@@ -57,52 +56,70 @@ const firebaseConfig = {
   measurementId: "G-09ENH5L0VG"
 };
 
+// Initialize Firebase
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 
 // Redirect if not logged in
 auth.onAuthStateChanged(user=>{
-  if(!user) window.location.href = "login.html";
-  else loadPlayers(user.uid);
+  if(!user) location.href="login.html";
+  else loadEntries();
 });
 
-// Sign out
-document.getElementById("signOutBtn").addEventListener("click", ()=>{
-  auth.signOut().then(()=>window.location.href="login.html");
-});
+// Save entry
+document.getElementById("saveBtn").onclick = async () => {
+  const name = document.getElementById("playerName").value.trim();
+  const power = parseInt(document.getElementById("playerPower").value);
+  const date = document.getElementById("entryDate").value;
 
-// Load existing players for this user
-async function loadPlayers(uid){
-  const snapshot = await db.collection('powers').doc(uid).collection('entries').get();
-  const players = [...new Set(snapshot.docs.map(d=>d.data().name))].sort();
-  const datalist = document.getElementById("playerList");
-  datalist.innerHTML = players.map(p=>`<option value="${p}">`).join('');
+  if(!name || isNaN(power) || !date) return alert("Fill all fields");
+
+  const user = auth.currentUser;
+  await db.collection('powers').doc(user.uid)
+          .collection('entries').add({name,power,date});
+
+  document.getElementById("playerName").value = '';
+  document.getElementById("playerPower").value = '';
+  document.getElementById("entryDate").value = '';
+
+  loadEntries();
+};
+
+// Load entries
+async function loadEntries() {
+  const user = auth.currentUser;
+  const snapshot = await db.collection('powers').doc(user.uid)
+                           .collection('entries').orderBy('date','desc').get();
+
+  const tbody = document.querySelector("#entriesTable tbody");
+  tbody.innerHTML = '';
+  snapshot.forEach(doc=>{
+    const data = doc.data();
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${data.name}</td>
+      <td>${data.power.toLocaleString()}</td>
+      <td>${data.date}</td>
+      <td class="actions">
+        <button onclick="deleteEntry('${doc.id}')">Delete</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
 }
 
-// Save new power entry
-document.getElementById("powerForm").addEventListener("submit", async e=>{
-  e.preventDefault();
-  const name = document.getElementById("playerName").value.trim();
-  const date = document.getElementById("entryDate").value;
-  const power = parseInt(document.getElementById("power").value);
+// Delete entry
+async function deleteEntry(id){
+  if(!confirm("Delete this entry?")) return;
+  const user = auth.currentUser;
+  await db.collection('powers').doc(user.uid)
+          .collection('entries').doc(id).delete();
+  loadEntries();
+}
 
-  if(!name || !date || isNaN(power)) return alert("Please fill all fields.");
-
-  const uid = auth.currentUser.uid;
-
-  try{
-    await db.collection('powers').doc(uid).collection('entries').add({
-      name, date, power
-    });
-    alert("Saved!");
-    document.getElementById("powerForm").reset();
-    loadPlayers(uid); // refresh list
-  }catch(err){
-    console.error(err);
-    alert("Error saving entry.");
-  }
-});
+// Sign out
+document.getElementById("signOutBtn").onclick = () => auth.signOut().then(()=>location.href="login.html");
 </script>
 </body>
 </html>
