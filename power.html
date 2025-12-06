@@ -2,37 +2,40 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Add Power — Dashboard</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Power Tracker</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
 <style>
-body{font-family:Inter,sans-serif;background:#f8fafc;color:#1e293b;margin:0;}
+body{font-family:Inter,sans-serif;margin:0;background:#f8fafc;color:#1e293b;}
 header{background:#1e40af;color:#fff;padding:1rem 1.5rem;display:flex;justify-content:space-between;align-items:center;}
-header h1{margin:0;font-size:1.5rem;}
+header h1{margin:0;font-size:1.25rem;}
 nav{display:flex;justify-content:center;gap:10px;padding:.75rem;background:#e2e8f0;}
-nav a{background:#3b82f6;color:#fff;padding:.6rem 1rem;border-radius:6px;text-decoration:none;font-weight:600;}
+nav a{color:#fff;text-decoration:none;padding:.6rem 1rem;background:#3b82f6;border-radius:6px;font-weight:600;}
 nav a:hover{opacity:.9;transform:translateY(-1px);}
-main{max-width:800px;margin:1.5rem auto;padding:0 1rem;}
-form{background:#fff;padding:1rem;border-radius:12px;box-shadow:0 6px 20px rgba(2,6,23,0.04);display:flex;gap:1rem;flex-wrap:wrap;}
-form label{flex-basis:100%;margin-top:0.5rem;}
-form input{padding:.5rem;border-radius:6px;border:1px solid #ccc;flex:1 1 200px;}
-form button{padding:.6rem 1rem;border-radius:6px;border:0;background:#3b82f6;color:#fff;font-weight:600;cursor:pointer;}
-form button:hover{opacity:.9;}
-table{width:100%;border-collapse:collapse;margin-top:1rem;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 6px 20px rgba(2,6,23,0.04);}
+main{max-width:900px;margin:1.25rem auto;padding:0 1rem;}
+form{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:1rem;}
+form input, form select, form button{padding:.5rem;border-radius:6px;border:1px solid #ccc;font-size:1rem;}
+form button{border:none;background:#3b82f6;color:#fff;font-weight:600;cursor:pointer;}
+form button:hover{background:#2563eb;}
+table{width:100%;border-collapse:collapse;margin-top:1rem;}
 th,td{padding:.6rem .8rem;text-align:left;border-bottom:1px solid #ccc;}
 th{background:#e2e8f0;}
-button.edit, button.delete{padding:.3rem .5rem;margin-left:.3rem;border:0;border-radius:6px;cursor:pointer;}
-button.edit{background:#fbbf24;color:#111;}
-button.delete{background:#ef4444;color:#fff;}
+td.number{text-align:right;}
+.delete-btn{background:#ef4444;color:#fff;border:none;padding:.3rem .6rem;border-radius:4px;cursor:pointer;}
+.delete-btn:hover{background:#dc2626;}
+.edit-btn{background:#fbbf24;color:#000;border:none;padding:.3rem .6rem;border-radius:4px;cursor:pointer;}
+.edit-btn:hover{background:#f59e0b;}
 </style>
 </head>
+
 <body>
 
 <header>
-  <h1>Power Dashboard</h1>
+  <h1>Power Tracker</h1>
 </header>
 
 <nav>
@@ -41,124 +44,131 @@ button.delete{background:#ef4444;color:#fff;}
 </nav>
 
 <main>
+  <form id="playerForm">
+    <input type="text" id="playerName" placeholder="Player Name" required>
+    <input type="number" id="playerPower" placeholder="Power" required>
+    <button type="submit">Add / Update</button>
+  </form>
 
-<h2>Add / Edit Player Power</h2>
-<form id="playerForm">
-  <label>Player Name</label>
-  <input type="text" id="playerNameInput" placeholder="Enter player name" required>
-
-  <label>Power</label>
-  <input type="number" id="powerInput" placeholder="Enter power" required>
-
-  <button type="submit">Save</button>
-</form>
-
-<h2>Current Players</h2>
-<table id="playerTable">
-  <thead>
-    <tr>
-      <th>Player</th>
-      <th>Power</th>
-      <th>Date</th>
-      <th>Actions</th>
-    </tr>
-  </thead>
-  <tbody>
-    <!-- Dynamic rows -->
-  </tbody>
-</table>
+  <table id="playerTable">
+    <thead>
+      <tr>
+        <th>Player</th>
+        <th>Previous Power</th>
+        <th>Current Power</th>
+        <th>% Change</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</main>
 
 <script>
-  // Firebase config
-  const firebaseConfig = {
-    apiKey: "AIzaSyAyhGftf_DfotmvL4iLx60NT98BjkbG6DM",
-    authDomain: "powercompare-bafd9.firebaseapp.com",
-    projectId: "powercompare-bafd9",
-    storageBucket: "powercompare-bafd9.appspot.com",
-    messagingSenderId: "768897803088",
-    appId: "1:768897803088:web:ff55aed87037cef6720255",
-    measurementId: "G-09ENH5L0VG"
-  };
+const firebaseConfig = {
+  apiKey: "AIzaSyAyhGftf_DfotmvL4iLx60NT98BjkbG6DM",
+  authDomain: "powercompare-bafd9.firebaseapp.com",
+  projectId: "powercompare-bafd9",
+  storageBucket: "powercompare-bafd9.firebasestorage.app",
+  messagingSenderId: "768897803088",
+  appId: "1:768897803088:web:ff55aed87037cef6720255",
+  measurementId: "G-09ENH5L0VG"
+};
 
-  // Initialize Firebase
-  firebase.initializeApp(firebaseConfig);
-  const db = firebase.firestore();
+// Initialize Firebase
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
 
-  const playerForm = document.getElementById('playerForm');
-  const playerNameInput = document.getElementById('playerNameInput');
-  const powerInput = document.getElementById('powerInput');
-  const playerTable = document.getElementById('playerTable').querySelector('tbody');
+let currentUser;
 
-  let editId = null;
-
-  // Load players from Firestore
-  function loadPlayers() {
-    db.collection('powerData').orderBy('date','desc').get().then(snapshot => {
-      playerTable.innerHTML = '';
-      snapshot.forEach(doc => {
-        const data = doc.data();
-        const row = document.createElement('tr');
-        row.innerHTML = `
-          <td>${data.name}</td>
-          <td>${data.power.toLocaleString()}</td>
-          <td>${data.date}</td>
-          <td>
-            <button class="edit" data-id="${doc.id}">Edit</button>
-            <button class="delete" data-id="${doc.id}">Delete</button>
-          </td>
-        `;
-        playerTable.appendChild(row);
-      });
-
-      // Edit buttons
-      document.querySelectorAll('button.edit').forEach(btn => {
-        btn.onclick = () => {
-          const id = btn.dataset.id;
-          const doc = snapshot.docs.find(d => d.id === id);
-          const data = doc.data();
-          playerNameInput.value = data.name;
-          powerInput.value = data.power;
-          editId = id;
-        };
-      });
-
-      // Delete buttons
-      document.querySelectorAll('button.delete').forEach(btn => {
-        btn.onclick = () => {
-          if(confirm("Delete this entry?")){
-            db.collection('powerData').doc(btn.dataset.id).delete().then(loadPlayers);
-          }
-        };
-      });
-    });
+// Check login
+auth.onAuthStateChanged(user => {
+  if(user) {
+    currentUser = user;
+    loadPlayers();
+  } else {
+    window.location.href = "login.html";
   }
+});
 
-  // Form submit
-  playerForm.onsubmit = e => {
-    e.preventDefault();
-    const name = playerNameInput.value.trim();
-    const power = parseInt(powerInput.value,10);
-    const date = new Date().toISOString().split('T')[0];
-    if(!name || !power) return;
+// Add / Update player
+document.getElementById("playerForm").addEventListener("submit", e=>{
+  e.preventDefault();
+  const name = document.getElementById("playerName").value.trim();
+  const power = parseInt(document.getElementById("playerPower").value);
 
-    if(editId){
-      db.collection('powerData').doc(editId).update({name,power,date}).then(()=>{
-        editId=null;
-        playerForm.reset();
-        loadPlayers();
+  if(!name || isNaN(power)) return;
+
+  // Add a new record
+  db.collection("powerData").add({
+    name,
+    power,
+    date: new Date().toISOString(),
+    userId: currentUser.uid
+  }).then(()=> {
+    document.getElementById("playerForm").reset();
+    loadPlayers();
+  });
+});
+
+// Load player table
+function loadPlayers(){
+  db.collection("powerData")
+    .where("userId","==",currentUser.uid)
+    .orderBy("date","asc")
+    .get()
+    .then(snapshot=>{
+      const players = {};
+      snapshot.forEach(doc=>{
+        const data = doc.data();
+        if(!players[data.name]) players[data.name] = [];
+        players[data.name].push({...data,id:doc.id});
       });
-    } else {
-      db.collection('powerData').add({name,power,date}).then(()=>{
-        playerForm.reset();
-        loadPlayers();
-      });
-    }
-  };
 
-  // Initial load
-  loadPlayers();
+      renderTable(players);
+    });
+}
+
+function renderTable(players){
+  const tbody = document.querySelector("#playerTable tbody");
+  tbody.innerHTML = "";
+
+  for(const name in players){
+    const records = players[name];
+    const prev = records.length > 1 ? records[records.length-2].power : 0;
+    const current = records[records.length-1].power;
+    const change = prev ? ((current-prev)/prev*100) : 0;
+
+    const row = document.createElement("tr");
+
+    row.innerHTML = `
+      <td>${name}</td>
+      <td class="number">${prev.toLocaleString()}</td>
+      <td class="number">${current.toLocaleString()}</td>
+      <td class="number">${change.toFixed(2)}%</td>
+      <td>
+        <button class="edit-btn">Edit</button>
+        <button class="delete-btn">Delete</button>
+      </td>
+    `;
+
+    // Edit
+    row.querySelector(".edit-btn").addEventListener("click", ()=>{
+      document.getElementById("playerName").value = name;
+      document.getElementById("playerPower").value = current;
+    });
+
+    // Delete last record
+    row.querySelector(".delete-btn").addEventListener("click", ()=>{
+      const lastRecord = records[records.length-1];
+      db.collection("powerData").doc(lastRecord.id).delete().then(loadPlayers);
+    });
+
+    tbody.appendChild(row);
+  }
+}
 </script>
 
-</main>
 </body>
 </html>
