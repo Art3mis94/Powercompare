@@ -2,17 +2,15 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Compare Players — Power Trends</title>
+<title>Compare Players — Power Trends (Local)</title>
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <style>
 body{margin:0;font-family:Inter,sans-serif;background:#f8fafc;color:#1e293b;}
 header{background:#1e40af;color:#fff;padding:1rem 1.5rem;display:flex;justify-content:space-between;align-items:center;}
 header h1{margin:0;font-size:1.5rem;font-weight:600;}
+/* Sign Out button style kept for consistency, but button removed from HTML */
 button.signOut{padding:.5rem 1rem;border-radius:6px;border:none;background:#3b82f6;color:#fff;cursor:pointer;}
 button.signOut:hover{opacity:.9;}
 nav{display:flex;justify-content:center;gap:10px;padding:.75rem;background:#e2e8f0;}
@@ -45,8 +43,7 @@ main{max-width:1200px;margin:1.5rem auto;padding:0 1rem;}
 
 <header>
   <h1>Compare Players</h1>
-  <button id="signOutBtn" class="signOut">Sign Out</button>
-</header>
+  </header>
 
 <nav>
   <a href="index.html">Dashboard</a>
@@ -55,37 +52,38 @@ main{max-width:1200px;margin:1.5rem auto;padding:0 1rem;}
 </nav>
 
 <main>
-<section class="section">
-  <h2>Comparison Setup</h2>
-  <div class="controls">
-    <div class="filter-group">
-      <label for="playerSelect">Players (Select multiple)</label>
-      <select id="playerSelect" multiple size="8"></select>
-    </div>
-    
-    <div class="filter-group">
-        <label for="comparisonMethod">Chart Method</label>
-        <select id="comparisonMethod">
-            <option value="rawPower">Raw Power (Y-Axis: Total Power)</option>
-            <option value="percentChange">Percent Change (Y-Axis: % Growth)</option>
-        </select>
-    </div>
+    <p style="text-align:center; font-style:italic; color:#64748b;">Data is stored locally in your browser.</p>
+    <section class="section">
+        <h2>Comparison Setup</h2>
+        <div class="controls">
+            <div class="filter-group">
+                <label for="playerSelect">Players (Select multiple)</label>
+                <select id="playerSelect" multiple size="8"></select>
+            </div>
+            
+            <div class="filter-group">
+                <label for="comparisonMethod">Chart Method</label>
+                <select id="comparisonMethod">
+                    <option value="rawPower">Raw Power (Y-Axis: Total Power)</option>
+                    <option value="percentChange">Percent Change (Y-Axis: % Growth)</option>
+                </select>
+            </div>
 
-    <div class="filter-group" style="flex-direction: row; align-items: center;">
-      <button id="chartBtn">Generate Chart</button>
-      <button id="compareBtn">Summary Table</button>
-      <button id="resetBtn">Reset</button>
-    </div>
-  </div>
-</section>
+            <div class="filter-group" style="flex-direction: row; align-items: center;">
+                <button id="chartBtn">Generate Chart</button>
+                <button id="compareBtn">Summary Table</button>
+                <button id="resetBtn">Reset</button>
+            </div>
+        </div>
+    </section>
 
-<section class="section" style="margin-top: 1.5rem;">
-    <h2>Power Trend Chart</h2>
-    <div id="chartContainer">
-        <p id="chartStatus">Select players and click "Generate Chart" to view the trend.</p>
-        <canvas id="powerChart" style="display:none;"></canvas>
-    </div>
-</section>
+    <section class="section" style="margin-top: 1.5rem;">
+        <h2>Power Trend Chart</h2>
+        <div id="chartContainer">
+            <p id="chartStatus">Select players and click "Generate Chart" or "Summary Table".</p>
+            <canvas id="powerChart" style="display:none;"></canvas>
+        </div>
+    </section>
 </main>
 
 <div id="overlay">
@@ -96,20 +94,31 @@ main{max-width:1200px;margin:1.5rem auto;padding:0 1rem;}
 </div>
 
 <script>
-const firebaseConfig = {
-  apiKey: "AIzaSyAyhGftf_DfotmvL4iLx60NT98BjkbG6DM",
-  authDomain: "powercompare-bafd9.firebaseapp.com",
-  projectId: "powercompare-bafd9",
-  storageBucket: "powercompare-bafd9.firebasestorage.app",
-  messagingSenderId: "768897803088",
-  appId: "1:768897803088:web:ff55aed87037cef6720255",
-  measurementId: "G-09ENH5L0VG"
-};
-firebase.initializeApp(firebaseConfig);
-const auth = firebase.auth();
-const db = firebase.firestore();
+// Key for localStorage
+const LOCAL_STORAGE_KEY = 'localPowerTrackerData';
 
-let currentUserUid = null;
+// Mock data to ensure charts have multiple points
+const initialData = [
+  // Alpha - Steady growth
+  { player: 'Alpha', power: 150000, date: '2025-12-01' },
+  { player: 'Alpha', power: 165000, date: '2025-12-03' },
+  { player: 'Alpha', power: 180000, date: '2025-12-05' },
+  { player: 'Alpha', power: 195000, date: '2025-12-09' },
+  // Beta - Rapid growth
+  { player: 'Beta', power: 100000, date: '2025-12-01' },
+  { player: 'Beta', power: 130000, date: '2025-12-03' },
+  { player: 'Beta', power: 160000, date: '2025-12-05' },
+  { player: 'Beta', power: 200000, date: '2025-12-09' },
+  // Gamma - Decline then recovery
+  { player: 'Gamma', power: 250000, date: '2025-12-01' },
+  { player: 'Gamma', power: 220000, date: '2025-12-03' },
+  { player: 'Gamma', power: 210000, date: '2025-12-05' },
+  { player: 'Gamma', power: 230000, date: '2025-12-09' },
+  // Delta - Sparse data
+  { player: 'Delta', power: 90000, date: '2025-12-02' },
+  { player: 'Delta', power: 100000, date: '2025-12-09' },
+];
+
 let allPlayerEntries = {};
 let comparisonData = [];
 let powerTrendChart;
@@ -117,96 +126,139 @@ const playerColors = {};
 const chartStatus = document.getElementById('chartStatus');
 const powerChartCanvas = document.getElementById('powerChart');
 
-// Utility to format numbers
-const formatNumber = (num, isPercent=false) => {
-    if(num===null||isNaN(num)) return 'N/A';
-    return isPercent ? num.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) : Math.round(num).toLocaleString();
+// Utility functions
+const formatNumber = (num, isPercent = false) => {
+    if (num === null || isNaN(num) || num === Infinity) return 'N/A';
+    return isPercent ? num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : Math.round(num).toLocaleString();
 };
-const getRandomColor=()=>`rgb(${Math.floor(Math.random()*200)},${Math.floor(Math.random()*200)},${Math.floor(Math.random()*200)})`;
+const getRandomColor = () => `rgb(${Math.floor(Math.random() * 200)},${Math.floor(Math.random() * 200)},${Math.floor(Math.random() * 200)})`;
 
-// Auth check
-auth.onAuthStateChanged(user=>{
-    if(!user) location.href="login.html";
-    else{
-        currentUserUid = user.uid;
-        loadAllPlayerEntries();
+/**
+ * Loads data from localStorage, initializes if empty, and groups by player.
+ * @returns {Array} The loaded and parsed array of power entries.
+ */
+function loadLocalData() {
+    const dataString = localStorage.getItem(LOCAL_STORAGE_KEY);
+    if (!dataString) {
+        // Initialize with mock data if no data exists
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(initialData));
+        return initialData;
     }
-});
-document.getElementById("signOutBtn").onclick = ()=> auth.signOut().then(()=>location.href="login.html");
-
-// Load all entries in real-time
-async function loadAllPlayerEntries(){
-    chartStatus.textContent = 'Loading player data...';
-    if(!currentUserUid) return;
-    const snapshot = await db.collection('powers').doc(currentUserUid).collection('entries')
-                            .orderBy('player').orderBy('date').get();
-    const players = {};
-    const playerNames = new Set();
-    snapshot.forEach(doc=>{
-        const data=doc.data();
-        const date = data.date?.substring(0,10) || new Date().toISOString().substring(0,10);
-        playerNames.add(data.player);
-        if(!players[data.player]) players[data.player]=[];
-        players[data.player].push({power:data.power,date,id:doc.id});
-    });
-    allPlayerEntries=players;
-    populatePlayers(Array.from(playerNames).sort());
-    chartStatus.textContent='Select players and click "Generate Chart" or "Summary Table".';
+    return JSON.parse(dataString);
 }
 
-function populatePlayers(playerNames){
-    const select=document.getElementById('playerSelect');
-    if(playerNames.length===0){
-        select.innerHTML='<option disabled>No players found</option>';
-        document.getElementById('chartBtn').disabled=true;
-        document.getElementById('compareBtn').disabled=true;
+/**
+ * Groups raw entries into an object keyed by player name.
+ * @param {Array} entries - The raw array of power entries.
+ */
+function groupEntries(entries) {
+    const grouped = {};
+    const playerNames = new Set();
+    entries.forEach(entry => {
+        // Normalize date format (YYYY-MM-DD)
+        const date = entry.date?.substring(0, 10) || new Date().toISOString().substring(0, 10);
+        playerNames.add(entry.player);
+        if (!grouped[entry.player]) grouped[entry.player] = [];
+        grouped[entry.player].push({ power: entry.power, date });
+    });
+    return { grouped, playerNames: Array.from(playerNames).sort() };
+}
+
+/**
+ * Main function to load and process player data.
+ */
+function loadAllPlayerEntries() {
+    chartStatus.textContent = 'Processing player data...';
+    const rawData = loadLocalData();
+    const { grouped, playerNames } = groupEntries(rawData);
+    allPlayerEntries = grouped;
+    populatePlayers(playerNames);
+    chartStatus.textContent = 'Select players and click "Generate Chart" or "Summary Table".';
+}
+
+function populatePlayers(playerNames) {
+    const select = document.getElementById('playerSelect');
+    if (playerNames.length === 0) {
+        select.innerHTML = '<option disabled>No players found</option>';
+        document.getElementById('chartBtn').disabled = true;
+        document.getElementById('compareBtn').disabled = true;
         return;
     }
-    select.innerHTML=playerNames.map(p=>`<option value="${p}">${p}</option>`).join('');
-    document.getElementById('chartBtn').disabled=false;
-    document.getElementById('compareBtn').disabled=false;
+    select.innerHTML = playerNames.map(p => `<option value="${p}">${p}</option>`).join('');
+    document.getElementById('chartBtn').disabled = false;
+    document.getElementById('compareBtn').disabled = false;
 }
 
-function showOverlay(){
-    const selectedNames=[...document.getElementById('playerSelect').options].filter(o=>o.selected).map(o=>o.value);
-    if(selectedNames.length<2){ alert('Select at least 2 players to compare.'); return; }
-    comparisonData=[];
-    selectedNames.forEach(name=>{
+function showOverlay() {
+    const selectedNames = [...document.getElementById('playerSelect').options].filter(o => o.selected).map(o => o.value);
+    if (selectedNames.length < 2) { alert('Select at least 2 players to compare.'); return; }
+    
+    comparisonData = [];
+    selectedNames.forEach(name => {
         const entries = allPlayerEntries[name];
-        if(!entries||entries.length===0) return;
-        const uniqueDates=[...new Set(entries.map(e=>e.date))].sort();
-        const latestDate=uniqueDates[uniqueDates.length-1];
-        const previousDate=uniqueDates.length>1?uniqueDates[uniqueDates.length-2]:null;
-        const latestPower = Math.max(...entries.filter(e=>e.date===latestDate).map(e=>e.power));
-        let previousPower=null;
-        if(previousDate) previousPower=Math.max(...entries.filter(e=>e.date===previousDate).map(e=>e.power));
-        const change = (previousPower && previousPower>0)?((latestPower-previousPower)/previousPower*100):(previousPower===0&&latestPower>0?Infinity:0);
-        comparisonData.push({name,currentPower:latestPower,previousPower,change:parseFloat(change.toFixed(2))});
+        if (!entries || entries.length === 0) return;
+
+        // Sort entries by date
+        entries.sort((a, b) => new Date(a.date) - new Date(b.date));
+        
+        // Find unique dates
+        const uniqueDates = [...new Set(entries.map(e => e.date))].sort();
+        
+        // Find the latest power for the latest date
+        const latestDate = uniqueDates[uniqueDates.length - 1];
+        const latestPower = Math.max(...entries.filter(e => e.date === latestDate).map(e => e.power));
+        
+        // Find the latest previous date (second to last unique date)
+        const previousDate = uniqueDates.length > 1 ? uniqueDates[uniqueDates.length - 2] : null;
+        let previousPower = null;
+
+        if (previousDate) {
+            previousPower = Math.max(...entries.filter(e => e.date === previousDate).map(e => e.power));
+        } else if (uniqueDates.length === 1 && entries.length > 1) {
+             // Handle case where multiple entries exist on the *same* day, but only one unique date
+             // We can't calculate a meaningful day-over-day change, so previousPower remains null.
+        }
+
+        let change = 0;
+        if (previousPower !== null && previousPower !== 0) {
+            change = ((latestPower - previousPower) / previousPower * 100);
+        } else if (previousPower === 0 && latestPower > 0) {
+             change = Infinity; // Growth from zero
+        } else if (previousPower !== null && previousPower > 0) {
+             // If previousPower > 0 and latestPower = 0 (or < 0), change is calculated normally
+             change = ((latestPower - previousPower) / previousPower * 100);
+        }
+
+        comparisonData.push({ name, currentPower: latestPower, previousPower, change: parseFloat(change.toFixed(2)) });
     });
+    
     renderComparisonTable();
-    document.getElementById('overlay').style.display='flex';
+    document.getElementById('overlay').style.display = 'flex';
 }
 
-let currentSort={field:'currentPower',asc:false};
-function renderComparisonTable(sortBy=currentSort.field,ascending=currentSort.asc){
-    const table=document.getElementById('compareTable');
-    comparisonData.sort((a,b)=>{
-        let valA=a[sortBy],valB=b[sortBy],comparison=0;
-        if(valA>valB) comparison=1; else if(valA<valB) comparison=-1;
-        return ascending?comparison:-comparison;
+let currentSort = { field: 'currentPower', asc: false };
+function renderComparisonTable(sortBy = currentSort.field, ascending = currentSort.asc) {
+    const table = document.getElementById('compareTable');
+    comparisonData.sort((a, b) => {
+        let valA = a[sortBy], valB = b[sortBy], comparison = 0;
+        if (valA === Infinity) return ascending ? 1 : -1;
+        if (valB === Infinity) return ascending ? -1 : 1;
+        if (valA > valB) comparison = 1; else if (valA < valB) comparison = -1;
+        return ascending ? comparison : -comparison;
     });
-    table.innerHTML=`
+
+    table.innerHTML = `
         <tr>
             <th onclick="sortTable('name')">Player</th>
-            <th onclick="sortTable('currentPower')">Current Power ${sortBy==='currentPower'? (ascending?'▲':'▼') : ''}</th>
+            <th onclick="sortTable('currentPower')">Current Power ${sortBy === 'currentPower' ? (ascending ? '▲' : '▼') : ''}</th>
             <th>Previous Power</th>
-            <th onclick="sortTable('change')">% Change ${sortBy==='change'? (ascending?'▲':'▼') : ''}</th>
+            <th onclick="sortTable('change')">% Change ${sortBy === 'change' ? (ascending ? '▲' : '▼') : ''}</th>
         </tr>
     `;
-    comparisonData.forEach(r=>{
-        const changeVal=r.change===Infinity?'+∞':`${r.change>=0?'+':''}${formatNumber(r.change,true)}%`;
-        const changeClass=r.change>0?'positive':(r.change<0?'negative':'');
-        table.innerHTML+=`
+    comparisonData.forEach(r => {
+        const changeVal = r.change === Infinity ? '+∞' : `${r.change >= 0 ? '+' : ''}${formatNumber(r.change, true)}%`;
+        const changeClass = r.change > 0 ? 'positive' : (r.change < 0 ? 'negative' : '');
+        table.innerHTML += `
             <tr>
                 <td>${r.name}</td>
                 <td class="power-val">${formatNumber(r.currentPower)}</td>
@@ -216,68 +268,147 @@ function renderComparisonTable(sortBy=currentSort.field,ascending=currentSort.as
         `;
     });
 }
-window.sortTable=(field)=>{
-    if(currentSort.field===field) currentSort.asc=!currentSort.asc;
-    else { currentSort.field=field; currentSort.asc=false; }
-    renderComparisonTable(currentSort.field,currentSort.asc);
+window.sortTable = (field) => {
+    if (currentSort.field === field) currentSort.asc = !currentSort.asc;
+    else { currentSort.field = field; currentSort.asc = false; }
+    renderComparisonTable(currentSort.field, currentSort.asc);
 };
 
-function generateChart(){
-    const selectedNames=[...document.getElementById('playerSelect').options].filter(o=>o.selected).map(o=>o.value);
-    const method=document.getElementById('comparisonMethod').value;
-    if(selectedNames.length===0){ chartStatus.textContent='Select at least one player.'; powerChartCanvas.style.display='none'; return; }
-    if(powerTrendChart) powerTrendChart.destroy();
-    let allDates=new Set();
-    selectedNames.forEach(name=>{
-        const entries=allPlayerEntries[name]||[];
-        entries.forEach(e=>allDates.add(e.date));
+function generateChart() {
+    const selectedNames = [...document.getElementById('playerSelect').options].filter(o => o.selected).map(o => o.value);
+    const method = document.getElementById('comparisonMethod').value;
+    if (selectedNames.length === 0) { chartStatus.textContent = 'Select at least one player.'; powerChartCanvas.style.display = 'none'; return; }
+    if (powerTrendChart) powerTrendChart.destroy();
+    
+    let allDates = new Set();
+    selectedNames.forEach(name => {
+        const entries = allPlayerEntries[name] || [];
+        entries.forEach(e => allDates.add(e.date));
     });
-    const sortedDates=Array.from(allDates).sort();
-    const datasets=selectedNames.map(player=>{
-        const entries=allPlayerEntries[player]||[];
-        if(!playerColors[player]) playerColors[player]=getRandomColor();
-        const datePowerMap=new Map();
-        entries.forEach(entry=>{
-            const existing=datePowerMap.get(entry.date)||0;
-            datePowerMap.set(entry.date,Math.max(existing,entry.power));
+    const sortedDates = Array.from(allDates).sort();
+    
+    const datasets = selectedNames.map(player => {
+        const entries = allPlayerEntries[player] || [];
+        if (!playerColors[player]) playerColors[player] = getRandomColor();
+        
+        // Use the highest power for any given date
+        const datePowerMap = new Map();
+        entries.forEach(entry => {
+            const existing = datePowerMap.get(entry.date) || 0;
+            datePowerMap.set(entry.date, Math.max(existing, entry.power));
         });
-        const rawData=sortedDates.map(d=>datePowerMap.get(d)??null);
-        const finalData=(method==='rawPower')?rawData:calculatePercentChangeSeries(rawData);
-        return {label:player,data:finalData,borderColor:playerColors[player],backgroundColor:playerColors[player].replace('rgb','rgba').replace(')',',0.5)'),spanGaps:true,tension:0.2,borderWidth:2,pointRadius:4};
-    }).filter(d=>d.data.some(v=>v!==null));
-    const ctx=powerChartCanvas.getContext('2d');
-    const chartTitle=(method==='rawPower')?'Raw Power Trend':'Percent Change Trend';
-    const yAxisLabel=(method==='rawPower')?'Total Power':'% Change';
-    const tooltipCallback={label:ctx=>{let l=ctx.dataset.label||''; if(l) l+=':'; if(ctx.parsed.y!==null) l+=method==='rawPower'?formatNumber(ctx.parsed.y):`${ctx.parsed.y>0?'+':''}${formatNumber(ctx.parsed.y,true)}%`; return l;}};
-    powerTrendChart=new Chart(ctx,{type:'line',data:{labels:sortedDates,datasets:datasets},options:{responsive:true,maintainAspectRatio:false,plugins:{title:{display:true,text:chartTitle,font:{size:16}},tooltip:{callbacks:tooltipCallback}},scales:{x:{title:{display:true,text:'Date'},type:'category'},y:{title:{display:true,text:yAxisLabel},beginAtZero:method==='percentChange',ticks:{callback:(value)=>method==='rawPower'?formatNumber(value):value+'%'}}}}});
-    chartStatus.style.display='none';
-    powerChartCanvas.style.display='block';
+
+        const rawData = sortedDates.map(d => datePowerMap.get(d) ?? null);
+        const finalData = (method === 'rawPower') ? rawData : calculatePercentChangeSeries(rawData);
+        
+        return { 
+            label: player, 
+            data: finalData, 
+            borderColor: playerColors[player], 
+            backgroundColor: playerColors[player].replace('rgb', 'rgba').replace(')', ',0.5)'), 
+            spanGaps: true, 
+            tension: 0.2, 
+            borderWidth: 2, 
+            pointRadius: 4 
+        };
+    }).filter(d => d.data.some(v => v !== null)); // Filter out datasets with no valid data
+
+    const ctx = powerChartCanvas.getContext('2d');
+    const chartTitle = (method === 'rawPower') ? 'Raw Power Trend' : 'Percent Change Trend';
+    const yAxisLabel = (method === 'rawPower') ? 'Total Power' : '% Change';
+    
+    const tooltipCallback = {
+        label: ctx => {
+            let l = ctx.dataset.label || '';
+            if (l) l += ':';
+            if (ctx.parsed.y !== null) {
+                l += method === 'rawPower' ? formatNumber(ctx.parsed.y) : `${ctx.parsed.y > 0 ? '+' : ''}${formatNumber(ctx.parsed.y, true)}%`;
+            }
+            return l;
+        }
+    };
+    
+    powerTrendChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: sortedDates,
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                title: { display: true, text: chartTitle, font: { size: 16 } },
+                tooltip: { callbacks: tooltipCallback }
+            },
+            scales: {
+                x: { title: { display: true, text: 'Date' }, type: 'category' },
+                y: {
+                    title: { display: true, text: yAxisLabel },
+                    beginAtZero: method !== 'rawPower', // Only force zero for % change charts
+                    ticks: {
+                        callback: (value) => method === 'rawPower' ? formatNumber(value) : value + '%'
+                    }
+                }
+            }
+        }
+    });
+    
+    chartStatus.style.display = 'none';
+    powerChartCanvas.style.display = 'block';
 }
 
-function calculatePercentChangeSeries(raw){
-    const percent=[];
-    for(let i=0;i<raw.length;i++){
-        const current=raw[i];
-        if(current===null){percent.push(null);continue;}
-        let previous=null,last=i-1;
-        while(last>=0){if(raw[last]!==null){previous=raw[last];break;}last--;}
-        if(previous===null) percent.push(null);
-        else if(previous===0) percent.push(current>0?10000:0);
-        else percent.push(parseFloat(((current-previous)/previous*100).toFixed(2)));
+/**
+ * Calculates a series of percent change values from a series of raw power values.
+ * Change is calculated based on the previous *recorded* data point.
+ */
+function calculatePercentChangeSeries(raw) {
+    const percent = [];
+    for (let i = 0; i < raw.length; i++) {
+        const current = raw[i];
+        if (current === null) {
+            percent.push(null);
+            continue;
+        }
+
+        let previous = null;
+        let last = i - 1;
+        
+        // Find the most recent non-null previous power entry
+        while (last >= 0) {
+            if (raw[last] !== null) {
+                previous = raw[last];
+                break;
+            }
+            last--;
+        }
+
+        if (previous === null) {
+            percent.push(null);
+        } else if (previous === 0) {
+            // Growth from 0 is technically infinite, but we cap it high for display
+            percent.push(current > 0 ? 10000 : 0);
+        } else {
+            percent.push(parseFloat(((current - previous) / previous * 100).toFixed(2)));
+        }
     }
     return percent;
 }
 
-document.getElementById('compareBtn').onclick=showOverlay;
-document.getElementById('chartBtn').onclick=generateChart;
-document.getElementById('resetBtn').onclick=()=>{
-    [...document.getElementById('playerSelect').options].forEach(o=>o.selected=false);
-    if(powerTrendChart) powerTrendChart.destroy();
-    powerChartCanvas.style.display='none';
-    chartStatus.style.display='block';
-    chartStatus.textContent='Select players and click "Generate Chart" or "Summary Table".';
+// Initial load
+document.addEventListener('DOMContentLoaded', loadAllPlayerEntries);
+
+// Event Listeners
+document.getElementById('compareBtn').onclick = showOverlay;
+document.getElementById('chartBtn').onclick = generateChart;
+document.getElementById('resetBtn').onclick = () => {
+    [...document.getElementById('playerSelect').options].forEach(o => o.selected = false);
+    if (powerTrendChart) powerTrendChart.destroy();
+    powerChartCanvas.style.display = 'none';
+    chartStatus.style.display = 'block';
+    chartStatus.textContent = 'Select players and click "Generate Chart" or "Summary Table".';
 };
-document.getElementById('closeOverlay').onclick=()=>document.getElementById('overlay').style.display='none';
+document.getElementById('closeOverlay').onclick = () => document.getElementById('overlay').style.display = 'none';
 </script>
 </body>
 </html>
