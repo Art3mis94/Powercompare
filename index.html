@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Player Dashboard — Power Tracker</title>
+<title>Player Dashboard — Power Tracker (Local)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -87,8 +87,7 @@ tr.selected { background:rgba(59,130,246,0.2); cursor:pointer; }
 
 <header>
   <h1>Player Dashboard</h1>
-  <button id="signOutBtn">Sign Out</button>
-</header>
+  </header>
 
 <nav>
   <a href="index.html">Dashboard</a>
@@ -97,6 +96,7 @@ tr.selected { background:rgba(59,130,246,0.2); cursor:pointer; }
 </nav>
 
 <main>
+  <p style="text-align:center; font-style:italic; color:#64748b;">Data is stored locally in your browser.</p>
   <table id="playerTable">
     <thead>
       <tr>
@@ -112,7 +112,6 @@ tr.selected { background:rgba(59,130,246,0.2); cursor:pointer; }
   </div>
 </main>
 
-<!-- Overlay for Player Stats -->
 <div id="overlay">
   <div>
     <h2 style="margin-top:0; text-align:center; color:#1e40af;">Player Performance Overview</h2>
@@ -135,26 +134,21 @@ tr.selected { background:rgba(59,130,246,0.2); cursor:pointer; }
   </div>
 </div>
 
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-
 <script>
-// Firebase config
-const firebaseConfig = {
-  apiKey: "AIzaSyAyhGftf_DfotmvL4iLx60NT98BjkbG6DM",
-  authDomain: "powercompare-bafd9.firebaseapp.com",
-  projectId: "powercompare-bafd9",
-  storageBucket: "powercompare-bafd9.firebasestorage.app",
-  messagingSenderId: "768897803088",
-  appId: "1:768897803088:web:ff55aed87037cef6720255",
-  measurementId: "G-09ENH5L0VG"
-};
-firebase.initializeApp(firebaseConfig);
-const auth = firebase.auth();
-const db = firebase.firestore();
+// Key for localStorage
+const LOCAL_STORAGE_KEY = 'localPowerTrackerData';
 
-let uid = null;
+// Mock data structure to initialize localStorage if empty
+const initialData = [
+  // Example data entry: { player: 'Player Name', power: 123456, date: 'YYYY-MM-DD' }
+  { player: 'Alpha', power: 150000, date: '2025-12-02' },
+  { player: 'Alpha', power: 175000, date: '2025-12-09' },
+  { player: 'Beta', power: 120000, date: '2025-12-02' },
+  { player: 'Beta', power: 140000, date: '2025-12-09' },
+  { player: 'Gamma', power: 200000, date: '2025-12-05' },
+  { player: 'Gamma', power: 195000, date: '2025-12-09' },
+];
+
 let allEntriesData = {};
 
 // Elements
@@ -162,91 +156,164 @@ const playerTableBody = document.querySelector('#playerTable tbody');
 const showOverlayBtn = document.getElementById('showOverlayBtn');
 const overlay = document.getElementById('overlay');
 const compareTableBody = document.querySelector('#compareTable tbody');
+const closeOverlayBtn = document.getElementById('closeOverlay');
 
-auth.onAuthStateChanged(user => {
-  if(!user) return window.location.href = "login.html";
-  uid = user.uid;
-  loadPlayers();
-});
-
-document.getElementById('signOutBtn').onclick = ()=> auth.signOut().then(()=>location.href="login.html");
-
-// Load players and latest power
-function loadPlayers(){
-  db.collection("powers").doc(uid).collection("entries")
-    .orderBy("player", "asc")
-    .orderBy("date", "asc")
-    .onSnapshot(snapshot=>{
-      allEntriesData = {};
-      playerTableBody.innerHTML = '';
-
-      snapshot.forEach(doc=>{
-        const data = doc.data();
-        data.id = doc.id;
-        if(!allEntriesData[data.player]) allEntriesData[data.player] = [];
-        allEntriesData[data.player].push(data);
-      });
-
-      // Render table
-      Object.entries(allEntriesData).forEach(([name, entries])=>{
-        entries.sort((a,b)=>new Date(a.date)-new Date(b.date));
-        const latest = entries[entries.length-1];
-        const sevenDaysAgo = new Date(latest.date);
-        sevenDaysAgo.setDate(sevenDaysAgo.getDate()-7);
-        const lastWeekEntries = entries.filter(e=>new Date(e.date)>=sevenDaysAgo);
-        const earliest = lastWeekEntries[0] || latest;
-        const change = earliest.power ? ((latest.power-earliest.power)/earliest.power*100) : 0;
-
-        const tr = document.createElement('tr');
-        tr.dataset.name = name;
-        tr.innerHTML = `
-          <td>${name}</td>
-          <td>${latest.power.toLocaleString()}</td>
-          <td style="color:${change>=0?'#10b981':'#ef4444'}">${change.toFixed(2)}%</td>
-        `;
-        tr.onclick = ()=> tr.classList.toggle('selected');
-        playerTableBody.appendChild(tr);
-      });
-    });
+/**
+ * Loads data from localStorage, initializes if empty, and groups by player.
+ * @returns {Array} The loaded and parsed array of power entries.
+ */
+function loadLocalData() {
+  const dataString = localStorage.getItem(LOCAL_STORAGE_KEY);
+  if (!dataString) {
+    // Initialize with mock data if no data exists
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(initialData));
+    return initialData;
+  }
+  return JSON.parse(dataString);
 }
 
-// Overlay
-showOverlayBtn.onclick = ()=>{
-  const selected = [...playerTableBody.querySelectorAll('tr.selected')].map(tr=>tr.dataset.name);
-  if(selected.length === 0) return alert("Select at least 1 player");
+/**
+ * Groups raw entries into an object keyed by player name.
+ * @param {Array} entries - The raw array of power entries.
+ */
+function groupEntries(entries) {
+  const grouped = {};
+  entries.forEach(entry => {
+    if (!grouped[entry.player]) grouped[entry.player] = [];
+    // Ensure 'date' is a string for sorting consistency
+    entry.date = entry.date.substring(0, 10);
+    grouped[entry.player].push(entry);
+  });
+  return grouped;
+}
+
+/**
+ * Calculates the 7-day power change for a player's entries.
+ * @param {Array} entries - Sorted array of a player's power entries.
+ * @returns {number} The percentage change.
+ */
+function calculateSevenDayChange(entries) {
+  if (entries.length === 0) return 0;
+
+  const latest = entries[entries.length - 1];
+  const latestDate = new Date(latest.date);
+  const sevenDaysAgo = new Date(latestDate);
+  sevenDaysAgo.setDate(latestDate.getDate() - 7);
+
+  // Find the entry that is the earliest one within the last 7 days (or the first entry ever)
+  let earliestPowerEntry = entries.find(e => new Date(e.date) >= sevenDaysAgo);
+  
+  if (!earliestPowerEntry || earliestPowerEntry === latest) {
+    // If only one entry in the last 7 days (or no entry older than 7 days), 
+    // fall back to the very first entry if available, or just the latest itself.
+    if (entries.length > 1) {
+        earliestPowerEntry = entries[0];
+    } else {
+        return 0; // Only one entry ever
+    }
+  }
+
+  const earliestPower = earliestPowerEntry.power;
+  const latestPower = latest.power;
+
+  if (earliestPower === 0) return 0;
+  return ((latestPower - earliestPower) / earliestPower) * 100;
+}
+
+/**
+ * Renders the main player dashboard table.
+ */
+function renderPlayerTable() {
+  const rawData = loadLocalData();
+  allEntriesData = groupEntries(rawData);
+  playerTableBody.innerHTML = ''; // Clear existing rows
+
+  Object.entries(allEntriesData).forEach(([name, entries]) => {
+    // Sort entries by date for reliable 'latest' calculation
+    entries.sort((a, b) => new Date(a.date) - new Date(b.date));
+    const latest = entries[entries.length - 1];
+    
+    // Calculate 7-day change
+    const change = calculateSevenDayChange(entries);
+
+    const tr = document.createElement('tr');
+    tr.dataset.name = name;
+    tr.innerHTML = `
+      <td>${name}</td>
+      <td>${latest.power.toLocaleString()}</td>
+      <td style="color:${change >= 0 ? '#10b981' : '#ef4444'}">${change.toFixed(2)}%</td>
+    `;
+    tr.onclick = () => tr.classList.toggle('selected');
+    playerTableBody.appendChild(tr);
+  });
+}
+
+/**
+ * Calculates and renders the performance overview in the overlay.
+ */
+function renderPerformanceOverview() {
+  const selected = [...playerTableBody.querySelectorAll('tr.selected')].map(tr => tr.dataset.name);
+  if (selected.length === 0) return alert("Select at least 1 player to view the overview.");
 
   compareTableBody.innerHTML = '';
-  const overviewData = selected.map(name=>{
+  
+  const overviewData = selected.map(name => {
     const entries = allEntriesData[name];
-    entries.sort((a,b)=>new Date(a.date)-new Date(b.date));
-    const latest = entries[entries.length-1];
-    const sevenDaysAgo = new Date(latest.date); sevenDaysAgo.setDate(sevenDaysAgo.getDate()-7);
-    const lastWeekEntries = entries.filter(e=>new Date(e.date)>=sevenDaysAgo);
-    const earliest = lastWeekEntries[0] || latest;
-    const growth = earliest.power ? ((latest.power-earliest.power)/earliest.power*100) : 0;
-    const trend = growth>0?'⬆️':(growth<0?'⬇️':'→');
-    const days = lastWeekEntries.length>1?(new Date(lastWeekEntries[lastWeekEntries.length-1].date)-new Date(lastWeekEntries[0].date))/86400000:1;
-    const avgGain = days>0?(latest.power-earliest.power)/days:0;
-    return {name, latest:latest.power, growth, trend, avgGain};
+    entries.sort((a, b) => new Date(a.date) - new Date(b.date));
+    const latest = entries[entries.length - 1];
+
+    const latestDate = new Date(latest.date);
+    const sevenDaysAgo = new Date(latestDate); 
+    sevenDaysAgo.setDate(latestDate.getDate() - 7);
+    
+    // Entries within the last 7 days (including the latest)
+    const lastWeekEntries = entries.filter(e => new Date(e.date) >= sevenDaysAgo);
+    
+    // Earliest entry used for the growth calculation (might be the very first entry if data is sparse)
+    const earliestPowerEntry = lastWeekEntries.length > 0 ? lastWeekEntries[0] : latest; 
+    
+    const growth = earliestPowerEntry.power ? ((latest.power - earliestPowerEntry.power) / earliestPowerEntry.power * 100) : 0;
+    const trend = growth > 0 ? '⬆️' : (growth < 0 ? '⬇️' : '→');
+    
+    // Calculate Avg Daily Gain based on the actual date span of the recorded entries
+    let avgGain = 0;
+    if (lastWeekEntries.length > 1) {
+      const firstDate = new Date(lastWeekEntries[0].date);
+      const lastDate = new Date(lastWeekEntries[lastWeekEntries.length-1].date);
+      const days = (lastDate - firstDate) / 86400000; // milliseconds in a day
+
+      if (days > 0) {
+        avgGain = (latest.power - earliestPowerEntry.power) / days;
+      }
+    }
+
+    return { name, latest: latest.power, growth, trend, avgGain };
   });
 
-  overviewData.sort((a,b)=>b.latest-a.latest).forEach((d,i)=>{
+  // Sort by latest power for ranking
+  overviewData.sort((a, b) => b.latest - a.latest).forEach((d, i) => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${d.name}</td>
       <td>${d.latest.toLocaleString()}</td>
-      <td style="color:${d.growth>=0?'#10b981':'#ef4444'}">${d.growth.toFixed(2)}%</td>
+      <td class="${d.growth >= 0 ? 'positive' : 'negative'}">${d.growth.toFixed(2)}%</td>
       <td>${d.trend}</td>
       <td>${d.avgGain.toFixed(1)}</td>
-      <td>${i+1}</td>
+      <td>${i + 1}</td>
     `;
     compareTableBody.appendChild(tr);
   });
 
-  overlay.style.display='flex';
-};
+  overlay.style.display = 'flex';
+}
 
-document.getElementById('closeOverlay').onclick = ()=> overlay.style.display='none';
+// Initial load
+document.addEventListener('DOMContentLoaded', renderPlayerTable);
+
+// Event Listeners
+showOverlayBtn.onclick = renderPerformanceOverview;
+closeOverlayBtn.onclick = () => overlay.style.display = 'none';
+
 </script>
 </body>
 </html>
