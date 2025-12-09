@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Power Tracker — Add/Edit Players</title>
+<title>Power Tracker — Add/Edit Players (Local)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600,700&display=swap" rel="stylesheet">
 <style>
@@ -28,8 +28,7 @@ main { max-width:900px; margin:1rem auto; padding:0 1rem; display:grid; gap:1rem
 
 <header>
   <h1>Power Tracker</h1>
-  <button id="signOutBtn" class="button cancel">Sign Out</button>
-</header>
+  </header>
 
 <nav>
   <a href="index.html">Dashboard</a>
@@ -37,6 +36,7 @@ main { max-width:900px; margin:1rem auto; padding:0 1rem; display:grid; gap:1rem
 </nav>
 
 <main>
+    <p style="grid-column: 1 / span 2; text-align:center; font-style:italic; color:#64748b; margin-top:0;">Data is stored locally in your browser.</p>
   <section class="section">
     <h2>Players</h2>
     <input id="playerNameInput" class="input" placeholder="Enter player name">
@@ -59,30 +59,23 @@ main { max-width:900px; margin:1rem auto; padding:0 1rem; display:grid; gap:1rem
   </section>
 </main>
 
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-
 <script>
-const firebaseConfig = {
-  apiKey: "AIzaSyAyhGftf_DfotmvL4iLx60NT98BjkbG6DM",
-  authDomain: "powercompare-bafd9.firebaseapp.com",
-  projectId: "powercompare-bafd9",
-  storageBucket: "powercompare-bafd9.firebasestorage.app",
-  messagingSenderId: "768897803088",
-  appId: "1:768897803088:web:ff55aed87037cef6720255",
-  measurementId: "G-09ENH5L0VG"
-};
+// Key for localStorage
+const LOCAL_STORAGE_KEY = 'localPowerTrackerData';
 
-firebase.initializeApp(firebaseConfig);
-const auth = firebase.auth();
-const db = firebase.firestore();
+// Mock data structure to initialize localStorage if empty
+const initialData = [
+  // Example data entry: { player: 'Player Name', power: 123456, date: 'YYYY-MM-DD' }
+  { player: 'Alpha', power: 150000, date: '2025-12-02' },
+  { player: 'Beta', power: 120000, date: '2025-12-02' },
+];
 
-let currentUserUid = null;
-let allEntries = {}; 
+// Global state variables
+let allEntries = {}; // Stores all entries keyed by player name
 let selectedPlayer = null;
-let selectedEntryId = null;
+let selectedEntryId = null; // Used to identify the entry being edited/deleted
 
+// Element references
 const playerNameInput = document.getElementById('playerNameInput');
 const addPlayerBtn = document.getElementById('addPlayerBtn');
 const deletePlayerBtn = document.getElementById('deletePlayerBtn');
@@ -94,117 +87,259 @@ const saveEntryBtn = document.getElementById('saveEntryBtn');
 const deleteEntryBtn = document.getElementById('deleteEntryBtn');
 const entriesList = document.getElementById('entriesList');
 
-auth.onAuthStateChanged(user=>{
-    if(!user) location.href="login.html";
-    currentUserUid = user.uid;
-    loadAllEntries();
-});
 
-document.getElementById("signOutBtn").onclick = ()=> auth.signOut().then(()=>location.href="login.html");
+// --- Utility and Data Functions ---
 
-function loadAllEntries() {
-    db.collection("powers").doc(currentUserUid).collection("entries")
-      .orderBy("player","asc").orderBy("date","asc")
-      .onSnapshot(snapshot=>{
-          allEntries = {};
-          const uniquePlayers = new Set();
-          snapshot.forEach(doc=>{
-              const data = doc.data();
-              data.id = doc.id;
-              uniquePlayers.add(data.player);
-              if(!allEntries[data.player]) allEntries[data.player] = [];
-              allEntries[data.player].push(data);
-          });
-          renderPlayersList(Array.from(uniquePlayers).sort());
-      });
+/**
+ * Loads data from localStorage, initializes if empty, and groups by player.
+ * @returns {Array} The loaded and parsed array of power entries.
+ */
+function loadLocalData() {
+    const dataString = localStorage.getItem(LOCAL_STORAGE_KEY);
+    if (!dataString) {
+        // Initialize with mock data if no data exists
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(initialData));
+        return initialData;
+    }
+    return JSON.parse(dataString);
 }
 
-function renderPlayersList(names){
+/**
+ * Saves the current entries array back to localStorage.
+ * @param {Array} entries - The array of power entries to save.
+ */
+function saveLocalData(entries) {
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(entries));
+}
+
+/**
+ * Generates a stable unique ID for a data entry based on player and date.
+ * This replaces Firestore document IDs.
+ * @param {string} player - The player name.
+ * @param {string} date - The date (YYYY-MM-DD).
+ * @returns {string} The unique ID.
+ */
+function generateEntryId(player, date) {
+    return `${player}_${date}`;
+}
+
+/**
+ * Reads all entries from local storage, groups them by player, and triggers rendering.
+ */
+function loadAllEntries() {
+    const rawData = loadLocalData();
+    allEntries = {};
+    const uniquePlayers = new Set();
+    
+    // Grouping and adding unique ID
+    rawData.forEach(data => {
+        // Ensure date is standardized (e.g., YYYY-MM-DD)
+        const date = data.date?.substring(0, 10);
+        if (!date || !data.player) return;
+
+        data.id = generateEntryId(data.player, date);
+        data.date = date; 
+
+        uniquePlayers.add(data.player);
+        if (!allEntries[data.player]) allEntries[data.player] = [];
+        allEntries[data.player].push(data);
+    });
+    
+    // Sort entries for display
+    Object.keys(allEntries).forEach(player => {
+        allEntries[player].sort((a, b) => new Date(b.date) - new Date(a.date)); // Sort newest first
+    });
+    
+    renderPlayersList(Array.from(uniquePlayers).sort());
+}
+
+
+// --- Rendering Functions ---
+
+function renderPlayersList(names) {
     playersList.innerHTML = "";
-    if(!selectedPlayer && names.length>0) selectedPlayer = names[0];
-    names.forEach(name=>{
+    // Automatically select the first player if none is selected
+    if (!selectedPlayer && names.length > 0) {
+        selectedPlayer = names[0];
+    } else if (names.length === 0) {
+        selectedPlayer = null;
+    }
+
+    names.forEach(name => {
         const li = document.createElement("li");
         li.textContent = name;
         li.dataset.name = name;
-        if(selectedPlayer===name) li.classList.add("selected");
+        if (selectedPlayer === name) {
+            li.classList.add("selected");
+        }
         playersList.appendChild(li);
     });
     renderEntries();
 }
 
-function renderEntries(){
+function renderEntries() {
     entriesList.innerHTML = "";
-    if(!selectedPlayer) return entriesList.innerHTML='<li style="color:#555">Select a player to see entries</li>';
+    if (!selectedPlayer) {
+        // Clear inputs and state if no player is selected
+        entryDate.value = '';
+        entryPower.value = '';
+        selectedEntryId = null;
+        return entriesList.innerHTML = '<li style="color:#555">Select a player to see entries</li>';
+    }
+    
     const entries = allEntries[selectedPlayer] || [];
-    if(entries.length===0) return entriesList.innerHTML='<li style="color:#555">No entries yet</li>';
-    entries.forEach(e=>{
+    if (entries.length === 0) {
+        return entriesList.innerHTML = '<li style="color:#555">No entries yet. Add one below.</li>';
+    }
+
+    entries.forEach(e => {
         const li = document.createElement("li");
         li.textContent = `${e.date}: ${Number(e.power).toLocaleString()} Power`;
         li.dataset.id = e.id;
-        if(selectedEntryId===e.id) li.classList.add("selected");
+        if (selectedEntryId === e.id) {
+            li.classList.add("selected");
+        }
         entriesList.appendChild(li);
     });
+    
+    // Reset date/power inputs after rendering entries
+    entryDate.value = new Date().toISOString().substring(0, 10);
+    entryPower.value = '';
+    selectedEntryId = null; 
 }
 
-addPlayerBtn.addEventListener("click", ()=>{
+
+// --- Event Handlers (CRUD Operations) ---
+
+addPlayerBtn.addEventListener("click", () => {
     const name = playerNameInput.value.trim();
-    if(!name) return alert("Enter player name");
-    // Add placeholder entry for new player
-    const today = new Date().toISOString().substring(0,10);
-    const docId = `${name}_${today}`;
-    db.collection("powers").doc(currentUserUid).collection("entries").doc(docId)
-      .set({player:name, date:today, power:0})
-      .then(()=>{ selectedPlayer=name; playerNameInput.value=""; });
+    if (!name) return alert("Enter a valid player name.");
+    
+    // Check if player already exists
+    if (Object.keys(allEntries).includes(name)) {
+        selectedPlayer = name;
+        playerNameInput.value = "";
+        loadAllEntries(); // Refresh to select existing player
+        return;
+    }
+
+    // Add a placeholder entry (Power: 0) for the new player
+    const today = new Date().toISOString().substring(0, 10);
+    const newEntry = { player: name, date: today, power: 0 };
+
+    const rawData = loadLocalData();
+    rawData.push(newEntry);
+    saveLocalData(rawData);
+
+    selectedPlayer = name;
+    playerNameInput.value = "";
+    loadAllEntries();
 });
 
-deletePlayerBtn.addEventListener("click", ()=>{
-    if(!selectedPlayer) return alert("Select player");
-    if(!confirm(`Delete player "${selectedPlayer}" and all entries?`)) return;
-    db.collection("powers").doc(currentUserUid).collection("entries")
-      .where("player","==",selectedPlayer).get()
-      .then(s=>{
-          const batch = db.batch();
-          s.forEach(doc=>batch.delete(doc.ref));
-          return batch.commit();
-      })
-      .then(()=>{ selectedPlayer=null; selectedEntryId=null; });
+deletePlayerBtn.addEventListener("click", () => {
+    if (!selectedPlayer) return alert("Select a player to delete.");
+    if (!confirm(`Are you sure you want to delete player "${selectedPlayer}" and ALL of their entries?`)) return;
+
+    // Filter out all entries for the selected player
+    let rawData = loadLocalData();
+    rawData = rawData.filter(e => e.player !== selectedPlayer);
+    saveLocalData(rawData);
+
+    // Reset state
+    selectedPlayer = null;
+    selectedEntryId = null;
+    loadAllEntries();
 });
 
-playersList.addEventListener("click", e=>{
+playersList.addEventListener("click", e => {
     const li = e.target.closest("li");
-    if(!li) return;
-    playersList.querySelectorAll('li').forEach(i=>i.classList.remove("selected"));
-    selectedPlayer = li.dataset.name;
-    selectedEntryId=null;
+    if (!li) return;
+    
+    // Unselect all, select current
+    playersList.querySelectorAll('li').forEach(i => i.classList.remove("selected"));
     li.classList.add("selected");
+
+    selectedPlayer = li.dataset.name;
+    selectedEntryId = null;
     renderEntries();
 });
 
-saveEntryBtn.addEventListener("click", ()=>{
-    if(!selectedPlayer) return alert("Select player");
+saveEntryBtn.addEventListener("click", () => {
+    if (!selectedPlayer) return alert("Select a player first.");
     const date = entryDate.value;
-    const power = Number(entryPower.value) || 0;
-    if(!date || power<0) return alert("Enter valid date and power");
-    const docId = `${selectedPlayer}_${date}`;
-    db.collection("powers").doc(currentUserUid).collection("entries").doc(docId)
-      .set({player:selectedPlayer, date:date, power:power})
-      .then(()=>{ selectedEntryId=null; });
+    const power = Number(entryPower.value);
+
+    if (!date || power < 0 || isNaN(power)) return alert("Enter a valid date and a non-negative power value.");
+
+    const entryId = generateEntryId(selectedPlayer, date);
+    const newEntry = { player: selectedPlayer, date: date, power: power };
+
+    let rawData = loadLocalData();
+    
+    let entryExists = false;
+    for (let i = 0; i < rawData.length; i++) {
+        // If an entry exists for the same player and date, update it
+        if (generateEntryId(rawData[i].player, rawData[i].date) === entryId) {
+            rawData[i].power = power;
+            entryExists = true;
+            break;
+        }
+    }
+    
+    if (!entryExists) {
+        // If it's a new entry (new date for this player), add it
+        rawData.push(newEntry);
+    }
+    
+    saveLocalData(rawData);
+    
+    // Clear inputs and refresh view
+    entryDate.value = new Date().toISOString().substring(0, 10);
+    entryPower.value = '';
+    selectedEntryId = null;
+    loadAllEntries();
 });
 
-deleteEntryBtn.addEventListener("click", ()=>{
-    if(!selectedEntryId) return alert("Select entry");
-    db.collection("powers").doc(currentUserUid).collection("entries").doc(selectedEntryId).delete()
-      .then(()=>{ selectedEntryId=null; });
+deleteEntryBtn.addEventListener("click", () => {
+    if (!selectedEntryId) return alert("Select an entry to delete.");
+    if (!confirm("Are you sure you want to delete this specific power entry?")) return;
+
+    // Filter out the entry with the matching unique ID (player_date)
+    let rawData = loadLocalData();
+    rawData = rawData.filter(e => generateEntryId(e.player, e.date) !== selectedEntryId);
+    saveLocalData(rawData);
+
+    // Reset state
+    selectedEntryId = null;
+    entryDate.value = new Date().toISOString().substring(0, 10);
+    entryPower.value = '';
+    loadAllEntries();
 });
 
-entriesList.addEventListener("click", e=>{
+entriesList.addEventListener("click", e => {
     const li = e.target.closest("li");
-    if(!li) return;
-    entriesList.querySelectorAll('li').forEach(i=>i.classList.remove("selected"));
-    selectedEntryId = li.dataset.id;
+    if (!li || !li.dataset.id) return;
+    
+    entriesList.querySelectorAll('li').forEach(i => i.classList.remove("selected"));
     li.classList.add("selected");
-    const data = allEntries[selectedPlayer].find(en=>en.id===selectedEntryId);
-    if(data){ entryDate.value=data.date; entryPower.value=Number(data.power); }
+    
+    selectedEntryId = li.dataset.id;
+    
+    // Find the corresponding data object
+    const data = allEntries[selectedPlayer]?.find(en => en.id === selectedEntryId);
+    
+    if (data) {
+        entryDate.value = data.date;
+        entryPower.value = Number(data.power);
+    }
+});
+
+
+// Initial Load
+document.addEventListener('DOMContentLoaded', () => {
+    // Set default date to today
+    entryDate.value = new Date().toISOString().substring(0, 10);
+    loadAllEntries();
 });
 </script>
 </body>
